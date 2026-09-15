@@ -1,0 +1,143 @@
+{% extends 'base.html' %}
+
+{% block title %}Manajemen Device{% endblock %}
+{% block header_title %}Device Management{% endblock %}
+{% block header_subtitle %}Kelola daftar koneksi dan kredensial perangkat{% endblock %}
+
+{% block content %}
+<style>
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 8px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+</style>
+
+<div class="max-w-7xl mx-auto space-y-6 pb-12">
+
+        {% if messages %}
+    <div class="space-y-2">
+        {% for message in messages %}
+            <div class="px-4 py-3 rounded-xl text-[13px] font-bold 
+                {% if message.tags == 'error' %}bg-[#FEF2F2] text-red-700 border border-red-200 shadow-sm
+                {% elif message.tags == 'success' %}bg-[#F0FDF4] text-green-700 border border-green-200 shadow-sm
+                {% else %}bg-blue-50 text-blue-700 border border-blue-200 shadow-sm{% endif %}">
+                {{ message }}
+            </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+        
+        <div class="px-6 py-5 border-b border-gray-100 flex flex-col md:flex-row justify-between items-center gap-4 bg-white">
+            <div>
+                <h3 class="text-lg font-extrabold text-gray-900 tracking-tight">Daftar Perangkat Firewall</h3>
+                <p class="text-[13px] font-medium text-gray-500 mt-0.5">Kelola perangkat dan pantau status koneksinya.</p>
+            </div>
+            
+            <div class="flex items-center space-x-3 w-full md:w-auto">
+                <div class="relative w-full md:w-64">
+                    <svg class="w-4 h-4 absolute left-3.5 top-2.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                    <input type="text" id="searchInput" placeholder="Cari IP / Nama..." 
+                        class="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-[13px] font-bold text-gray-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-200 transition-colors shadow-sm">
+                </div>
+                
+                <a href="{% url 'devices:create' %}" class="whitespace-nowrap inline-flex items-center px-4 py-2 bg-gray-900 text-white rounded-xl text-[13px] font-bold hover:bg-gray-800 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900">
+                    <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"></path></svg>
+                    Tambah Device
+                </a>
+            </div>
+        </div>
+
+        <div class="overflow-x-auto custom-scrollbar">
+            <table class="min-w-full divide-y divide-gray-100" id="deviceTable">
+                <thead class="bg-[#F8FAFC]">
+                    <tr>
+                        <th class="px-6 py-4 text-left text-[11px] font-extrabold text-gray-500 uppercase tracking-wider">Nama Perangkat</th>
+                        <th class="px-6 py-4 text-left text-[11px] font-extrabold text-gray-500 uppercase tracking-wider">IP Management</th>
+                        <th class="px-6 py-4 text-center text-[11px] font-extrabold text-gray-500 uppercase tracking-wider">Port</th>
+                        <th class="px-6 py-4 text-left text-[11px] font-extrabold text-gray-500 uppercase tracking-wider">OS Version</th>
+                        <th class="px-6 py-4 text-center text-[11px] font-extrabold text-gray-500 uppercase tracking-wider">Status</th>
+                        <th class="px-6 py-4 text-center text-[11px] font-extrabold text-gray-500 uppercase tracking-wider">Aksi</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-50">
+                    {% for device in devices %}
+                    <tr class="hover:bg-gray-50/50 transition-colors">
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-[14px] font-extrabold text-gray-900">{{ device.name }}</div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-[13px] font-bold text-gray-600">{{ device.ip_address }}</div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                            <div class="text-[12px] font-extrabold text-gray-700 bg-gray-100 px-2 py-1 rounded-md inline-block border border-gray-200">{{ device.port }}</div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-[13px] font-medium text-gray-500">{{ device.os_version|default:"-" }}</div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                            {% if device.connection_status == 'CONNECTED' %}
+                                <span class="px-2.5 py-1 inline-flex text-[11px] leading-tight font-extrabold rounded-md bg-[#F0FDF4] text-green-700 border border-green-200 shadow-sm uppercase tracking-wide">Connected</span>
+                            {% elif device.connection_status == 'DISCONNECTED' or device.connection_status == 'ERROR' %}
+                                <span class="px-2.5 py-1 inline-flex text-[11px] leading-tight font-extrabold rounded-md bg-[#FEF2F2] text-red-600 border border-red-200 shadow-sm uppercase tracking-wide">Error</span>
+                            {% else %}
+                                <span class="px-2.5 py-1 inline-flex text-[11px] leading-tight font-extrabold rounded-md bg-gray-50 text-gray-600 border border-gray-200 shadow-sm uppercase tracking-wide">Untested</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                            <div class="flex items-center justify-center space-x-2">
+                                <a href="{% url 'devices:sync' device.pk %}" class="inline-flex items-center px-2.5 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-800 border border-blue-200 rounded-lg text-[11px] font-extrabold uppercase tracking-wide transition-all shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1" title="Sinkronisasi Ulang">
+                                    <svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                                    Sync
+                                </a>
+                                <a href="{% url 'devices:update' device.pk %}" class="inline-flex items-center px-2.5 py-1.5 bg-gray-50 text-gray-700 hover:bg-gray-100 hover:text-gray-900 border border-gray-200 rounded-lg text-[11px] font-extrabold uppercase tracking-wide transition-all shadow-sm focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-1" title="Edit Perangkat">
+                                    <svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                                    Edit
+                                </a>
+                                <a href="{% url 'devices:delete' device.pk %}" class="inline-flex items-center px-2.5 py-1.5 bg-red-50 text-red-700 hover:bg-red-100 hover:text-red-800 border border-red-200 rounded-lg text-[11px] font-extrabold uppercase tracking-wide transition-all shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1" title="Hapus Perangkat">
+                                    <svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                    Hapus
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="px-6 py-16 text-center">
+                            <div class="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-gray-100 mb-4">
+                                <svg class="h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"></path></svg>
+                            </div>
+                            <h3 class="text-sm font-bold text-gray-900">Belum ada perangkat</h3>
+                            <p class="text-[13px] font-medium text-gray-500 mt-1">Tambahkan perangkat FortiGate pertama Anda untuk mulai mengelola sistem.</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function filterTable() {
+        const input = document.getElementById('searchInput');
+        const filter = input.value.toLowerCase();
+        const table = document.getElementById('deviceTable');
+        const rows = table.getElementsByTagName('tr');
+
+        for (let i = 1; i < rows.length; i++) {
+            const rowText = rows[i].textContent || rows[i].innerText;
+            if (rowText.toLowerCase().indexOf(filter) > -1) {
+                rows[i].style.display = "";
+            } else {
+                rows[i].style.display = "none";
+            }
+        }
+    }
+
+    document.getElementById('searchInput').addEventListener('keyup', filterTable);
+</script>
+{% endblock %}

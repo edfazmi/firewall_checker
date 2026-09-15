@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kelola Akun</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 font-sans text-gray-800">
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div class="mb-6">
+            <!-- Kembali ke Dashboard -->
+            <a href="/" class="flex items-center gap-2 text-gray-600 hover:text-blue-600 transition font-medium w-fit">
+                <i class="fas fa-arrow-left"></i> Kembali ke Dashboard
+            </a>
+        </div>
+
+        <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+            <!-- ================= KIRI: Form Informasi Profil ================= -->
+            <div class="xl:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+                <h2 class="text-xl font-bold text-gray-800 mb-6 pb-4 border-b border-gray-100">Informasi Profil</h2>
+                
+                <form action="{% url 'kelola_akun' %}" method="POST" class="space-y-6">
+                    {% csrf_token %}
+                    <div class="flex flex-col sm:flex-row sm:items-center gap-4">
+                        <div class="flex items-center gap-4 sm:w-1/3">
+                            <div class="bg-blue-50 text-blue-600 rounded-full h-10 w-10 flex items-center justify-center shrink-0"><i class="fas fa-user"></i></div>
+                            <label class="font-semibold text-gray-700">Nama Lengkap</label>
+                        </div>
+                        <input type="text" name="nama_lengkap" value="{{ request.user.first_name }} {{ request.user.last_name }}" class="sm:w-2/3 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none w-full" required>
+                    </div>
+
+                    <div class="flex flex-col sm:flex-row sm:items-center gap-4">
+                        <div class="flex items-center gap-4 sm:w-1/3">
+                            <div class="bg-blue-50 text-blue-600 rounded-full h-10 w-10 flex items-center justify-center shrink-0"><i class="fas fa-at"></i></div>
+                            <label class="font-semibold text-gray-700">Username</label>
+                        </div>
+                        <input type="text" name="username" value="{{ request.user.username }}" class="sm:w-2/3 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none w-full" required>
+                    </div>
+
+                    <div class="flex flex-col sm:flex-row sm:items-center gap-4">
+                        <div class="flex items-center gap-4 sm:w-1/3">
+                            <div class="bg-blue-50 text-blue-600 rounded-full h-10 w-10 flex items-center justify-center shrink-0"><i class="fas fa-envelope"></i></div>
+                            <label class="font-semibold text-gray-700">Email</label>
+                        </div>
+                        <input type="email" name="email" value="{{ request.user.email }}" class="sm:w-2/3 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none w-full" required>
+                    </div>
+
+                    <div class="flex flex-col sm:flex-row sm:items-center gap-4">
+                        <div class="flex items-center gap-4 sm:w-1/3">
+                            <div class="bg-blue-50 text-blue-600 rounded-full h-10 w-10 flex items-center justify-center shrink-0"><i class="fas fa-briefcase"></i></div>
+                            <label class="font-semibold text-gray-700">Jabatan</label>
+                        </div>
+                        <input type="text" name="jabatan" value="{{ request.user.userprofile.jabatan|default_if_none:'' }}" class="sm:w-2/3 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none w-full">
+                    </div>
+
+                    <div class="flex flex-col sm:flex-row sm:items-center gap-4">
+                        <div class="flex items-center gap-4 sm:w-1/3">
+                            <div class="bg-blue-50 text-blue-600 rounded-full h-10 w-10 flex items-center justify-center shrink-0"><i class="fas fa-building"></i></div>
+                            <label class="font-semibold text-gray-700">Divisi</label>
+                        </div>
+                        <input type="text" name="divisi" value="{{ request.user.userprofile.divisi|default_if_none:'' }}" class="sm:w-2/3 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none w-full">
+                    </div>
+
+                    <!-- Tombol Trigger Modal Ganti Password -->
+                    <div class="flex flex-col sm:flex-row sm:items-center gap-4 pt-2">
+                        <div class="flex items-center gap-4 sm:w-1/3">
+                            <div class="bg-blue-50 text-blue-600 rounded-full h-10 w-10 flex items-center justify-center shrink-0"><i class="fas fa-fingerprint"></i></div>
+                            <label class="font-semibold text-gray-700">Password</label>
+                        </div>
+                        <button type="button" onclick="bukaModalPassword()" class="sm:w-2/3 p-3 border border-gray-300 rounded-lg text-left text-gray-500 hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none w-full transition flex justify-between items-center">
+                            <span>Ubah Password...</span>
+                            <i class="fas fa-chevron-right text-gray-400"></i>
+                        </button>
+                    </div>
+
+                    <div class="flex justify-end pt-6 border-t border-gray-100 mt-6">
+                        <button type="submit" class="bg-slate-700 hover:bg-slate-800 text-white font-bold py-3 px-10 rounded-lg shadow-md transition">Simpan</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- ================= KANAN: Kartu Profil & List Akun ================= -->
+            <div class="flex flex-col gap-6">
+                <!-- Kartu Tampilan Profil -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-8 flex flex-col items-center justify-center">
+                    <h3 class="w-full text-left font-bold text-gray-800 mb-6">Profil</h3>
+                    <div class="bg-[#D1C6B4] text-black font-bold text-6xl rounded-full h-48 w-48 flex items-center justify-center mb-6">
+                        {{ inisial_profil }}
+                    </div>
+                    <h2 class="text-2xl font-bold text-gray-800 text-center">{{ request.user.first_name }} {{ request.user.last_name }}</h2>
+                    <p class="text-gray-500 font-medium text-center">
+                        {% if request.user.is_superuser %}Super Admin{% else %}Admin{% endif %}
+                    </p>
+                </div>
+
+                <!-- Kartu List Akun -->
+                <div class="bg-gray-100 rounded-xl shadow-sm border border-gray-200 p-6">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="font-bold text-gray-800">List Akun</h3>
+                        <!-- Tombol Tambah Akun menggunakan onclick -->
+                        <button type="button" onclick="bukaModalTambah()" class="bg-slate-700 hover:bg-slate-800 text-white text-sm font-semibold py-2 px-4 rounded-lg shadow-sm transition flex items-center gap-2">
+                            <i class="fas fa-plus"></i> Tambah Akun
+                        </button>
+                    </div>
+
+                    <div class="space-y-4 max-h-[400px] overflow-y-auto pr-2">
+                        {% for akun in semua_akun %}
+                            <div class="{% if akun.id == request.user.id %}bg-gray-200/60{% else %}bg-white border border-gray-200{% endif %} p-4 rounded-lg flex justify-between items-center">
+                                <div>
+                                    <div class="font-bold text-gray-800">
+                                        {% if akun.first_name %}{{ akun.first_name }} {{ akun.last_name }}{% else %}{{ akun.username }}{% endif %}
+                                    </div>
+                                    <div class="text-sm text-gray-500">
+                                        {% if akun.is_superuser %}Super Admin{% else %}Admin{% endif %}
+                                    </div>
+                                </div>
+                                
+                                {% if akun.id != request.user.id %}
+                                    <div class="flex gap-2">                                        
+                                        <!-- Form untuk menghapus akun dipindah ke dalam for-loop -->
+                                        <form action="{% url 'hapus_akun' akun.id %}" method="POST" class="inline" onsubmit="return confirm('Apakah Anda yakin ingin menghapus akun {{ akun.first_name|default:akun.username }}?');">
+                                            {% csrf_token %}
+                                            <button type="submit" class="bg-red-100 hover:bg-red-200 text-red-600 text-sm font-semibold py-1.5 px-4 rounded transition">Hapus</button>
+                                        </form>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        {% empty %}
+                            <div class="text-center text-gray-500">Belum ada akun lain.</div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= MODAL GANTI PASSWORD ================= -->
+    <div id="modalPassword" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+        <div class="bg-white rounded-xl shadow-lg w-full max-w-md p-6 relative">
+            <h3 class="text-xl font-bold text-gray-800 mb-4 border-b pb-2">Ubah Password</h3>
+            
+            <div id="notifModal" class="hidden mb-4 p-3 rounded-lg text-sm font-semibold"></div>
+
+            <div id="tahapSatu">
+                <p class="text-sm text-gray-600 mb-4">Silakan masukkan password lama Anda untuk keamanan.</p>
+                <div class="mb-4">
+                    <label class="block text-gray-700 font-semibold mb-2">Password Lama</label>
+                    <input type="password" id="inputPasswordLama" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                </div>
+                <div class="flex justify-end gap-3 mt-6">
+                    <button type="button" onclick="tutupModalPassword()" class="px-5 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-semibold transition">Batal</button>
+                    <button type="button" onclick="cekPasswordLama()" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition">Lanjut</button>
+                </div>
+            </div>
+
+            <div id="tahapDua" class="hidden">
+                <p class="text-sm text-green-600 font-semibold mb-4"><i class="fas fa-check-circle"></i> Password lama valid.</p>
+                <div class="mb-4">
+                    <label class="block text-gray-700 font-semibold mb-2">Password Baru</label>
+                    <input type="password" id="inputPasswordBaru" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-700 font-semibold mb-2">Konfirmasi Password Baru</label>
+                    <input type="password" id="inputKonfirmasiPassword" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                </div>
+                <div class="flex justify-end gap-3 mt-6">
+                    <button type="button" onclick="tutupModalPassword()" class="px-5 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-semibold transition">Batal</button>
+                    <button type="button" onclick="simpanPasswordBaru()" class="px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition">Simpan Password</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= MODAL TAMBAH AKUN ================= -->
+    <div id="modalTambah" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+        <div class="bg-white rounded-xl shadow-lg w-full max-w-2xl p-6 relative max-h-[90vh] overflow-y-auto">
+            <h3 class="text-xl font-bold text-gray-800 mb-4 border-b pb-2">Tambah Akun Baru</h3>
+            
+            <form action="{% url 'tambah_akun' %}" method="POST" class="space-y-4">
+                {% csrf_token %}
+                
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Nama Lengkap</label>
+                        <input type="text" name="nama_lengkap" class="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Username</label>
+                        <input type="text" name="username" class="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Email</label>
+                        <input type="email" name="email" class="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Jabatan</label>
+                        <input type="text" name="jabatan" class="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Divisi</label>
+                        <input type="text" name="divisi" class="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+                </div>
+
+                <div class="border-t pt-4 mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Password</label>
+                        <input type="password" name="password" id="inputPwBaru" onkeyup="cekKonfirmasiPassword()" class="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Konfirmasi Password</label>
+                        <input type="password" id="inputKonfirmPw" onkeyup="cekKonfirmasiPassword()" class="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" required>
+                        <span id="notifKonfirm" class="text-xs font-semibold mt-1 block"></span>
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-3 mt-6 border-t pt-4">
+                    <button type="button" onclick="tutupModalTambah()" class="px-5 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-semibold transition">Batal</button>
+                    <button type="submit" id="btnSimpanAkun" class="px-5 py-2.5 bg-slate-700 text-white rounded-lg font-semibold transition opacity-50 cursor-not-allowed" disabled>Simpan Akun Baru</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ================= SCRIPT UTAMA ================= -->
+    <script>
+        // --- 1. Fungsi Modal Tambah Akun ---
+        function bukaModalTambah() {
+            document.getElementById('modalTambah').classList.remove('hidden');
+        }
+
+        function tutupModalTambah() {
+            document.getElementById('modalTambah').classList.add('hidden');
+            // Bersihkan form modal
+            document.getElementById('inputPwBaru').value = '';
+            document.getElementById('inputKonfirmPw').value = '';
+            document.getElementById('notifKonfirm').innerHTML = '';
+            
+            var btnSimpan = document.getElementById('btnSimpanAkun');
+            btnSimpan.disabled = true;
+            btnSimpan.classList.add('opacity-50', 'cursor-not-allowed');
+            btnSimpan.classList.remove('hover:bg-slate-800');
+        }
+
+        function cekKonfirmasiPassword() {
+            var pw = document.getElementById('inputPwBaru').value;
+            var konfirm = document.getElementById('inputKonfirmPw').value;
+            var notif = document.getElementById('notifKonfirm');
+            var btnSimpan = document.getElementById('btnSimpanAkun');
+
+            if (konfirm.length === 0) {
+                notif.innerHTML = '';
+                btnSimpan.disabled = true;
+                btnSimpan.classList.add('opacity-50', 'cursor-not-allowed');
+                btnSimpan.classList.remove('hover:bg-slate-800');
+                return;
+            }
+
+            if (pw === konfirm) {
+                notif.innerHTML = 'Password cocok';
+                notif.className = 'text-xs font-semibold mt-1 block text-green-600';
+                
+                btnSimpan.disabled = false;
+                btnSimpan.classList.remove('opacity-50', 'cursor-not-allowed');
+                btnSimpan.classList.add('hover:bg-slate-800');
+            } else {
+                notif.innerHTML = 'Password tidak sama';
+                notif.className = 'text-xs font-semibold mt-1 block text-red-600';
+                
+                btnSimpan.disabled = true;
+                btnSimpan.classList.add('opacity-50', 'cursor-not-allowed');
+                btnSimpan.classList.remove('hover:bg-slate-800');
+            }
+        }
+
+        // --- 2. Fungsi Modal Ubah Password Profil ---
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        function tampilkanNotif(pesan, tipe) {
+            var notif = document.getElementById('notifModal');
+            notif.innerHTML = pesan;
+            notif.classList.remove('hidden', 'bg-red-100', 'text-red-700', 'bg-green-100', 'text-green-700');
+            
+            if (tipe === 'error') {
+                notif.classList.add('bg-red-100', 'text-red-700');
+            } else {
+                notif.classList.add('bg-green-100', 'text-green-700');
+            }
+        }
+
+        function bukaModalPassword() {
+            document.getElementById('modalPassword').classList.remove('hidden');
+            document.getElementById('tahapSatu').classList.remove('hidden');
+            document.getElementById('tahapDua').classList.add('hidden');
+            document.getElementById('notifModal').classList.add('hidden');
+            
+            document.getElementById('inputPasswordLama').value = '';
+            document.getElementById('inputPasswordBaru').value = '';
+            document.getElementById('inputKonfirmasiPassword').value = '';
+        }
+
+        function tutupModalPassword() {
+            document.getElementById('modalPassword').classList.add('hidden');
+        }
+
+        function cekPasswordLama() {
+            var passwordLama = document.getElementById('inputPasswordLama').value;
+            if (passwordLama === '') {
+                tampilkanNotif('Password lama tidak boleh kosong.', 'error');
+                return;
+            }
+
+            fetch("{% url 'ubah_password_ajax' %}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken')
+                },
+                body: JSON.stringify({
+                    'action': 'cek_lama',
+                    'password_lama': passwordLama
+                })
+            })
+            .then(function(response) {
+                return response.json();
+            })
+            .then(function(data) {
+                if (data.status === 'success') {
+                    document.getElementById('tahapSatu').classList.add('hidden');
+                    document.getElementById('tahapDua').classList.remove('hidden');
+                    document.getElementById('notifModal').classList.add('hidden'); 
+                } else {
+                    tampilkanNotif(data.pesan, 'error');
+                }
+            })
+            .catch(function(error) {
+                tampilkanNotif('Terjadi kesalahan koneksi.', 'error');
+            });
+        }
+
+        function simpanPasswordBaru() {
+            var passwordBaru = document.getElementById('inputPasswordBaru').value;
+            var konfirmasiPassword = document.getElementById('inputKonfirmasiPassword').value;
+
+            if (passwordBaru === '' || konfirmasiPassword === '') {
+                tampilkanNotif('Kolom password baru tidak boleh kosong.', 'error');
+                return;
+            }
+
+            if (passwordBaru !== konfirmasiPassword) {
+                tampilkanNotif('Konfirmasi password tidak cocok.', 'error');
+                return;
+            }
+
+            fetch("{% url 'ubah_password_ajax' %}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken')
+                },
+                body: JSON.stringify({
+                    'action': 'simpan_baru',
+                    'password_baru': passwordBaru,
+                    'konfirmasi_password': konfirmasiPassword
+                })
+            })
+            .then(function(response) {
+                return response.json();
+            })
+            .then(function(data) {
+                if (data.status === 'success') {
+                    alert("Berhasil: " + data.pesan);
+                    tutupModalPassword();
+                } else {
+                    tampilkanNotif(data.pesan, 'error');
+                }
+            })
+            .catch(function(error) {
+                tampilkanNotif('Terjadi kesalahan koneksi.', 'error');
+            });
+        }
+    </script>
+</body>
+</html>

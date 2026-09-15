@@ -1,0 +1,136 @@
+<!-- templates/dashboard/index.html -->
+{% extends 'base.html' %}
+
+{% block title %}Dashboard Utama{% endblock %}
+{% block header_title %}Dashboard{% endblock %}
+{% block header_subtitle %}Ringkasan metrik dan status seluruh perangkat Firewall{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-7xl mx-auto">
+
+        {% if messages %}
+    <div class="space-y-2">
+        {% for message in messages %}
+            <div class="px-4 py-3 rounded-xl text-[13px] font-bold 
+                {% if message.tags == 'error' %}bg-[#FEF2F2] text-red-700 border border-red-200 shadow-sm
+                {% elif message.tags == 'success' %}bg-[#F0FDF4] text-green-700 border border-green-200 shadow-sm
+                {% else %}bg-blue-50 text-blue-700 border border-blue-200 shadow-sm{% endif %}">
+                {{ message }}
+            </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Bulan Dinamis -->
+    <div class="flex items-center text-lg font-bold text-gray-800">
+        <svg class="w-6 h-6 mr-2 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+        {{ current_month_year }}
+    </div>
+
+    <!-- Tiga Kartu Statistik -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="bg-[#F8F9FA] rounded-2xl p-6 border border-gray-200 shadow-sm flex flex-col justify-center h-40 transition-transform hover:scale-[1.02]">
+            <div class="flex items-center space-x-4 mb-2">
+                <div class="bg-blue-100 p-3 rounded-xl text-blue-600">
+                    <svg class="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M4 9h4v11H4zM10 4h4v16h-4zM16 13h4v7h-4z"></path></svg>
+                </div>
+                <div class="text-4xl font-extrabold text-blue-600">{{ total_devices }}</div>
+            </div>
+            <div class="text-sm font-semibold text-gray-700 ml-16 mt-1">Total Device Terdaftar</div>
+            <div class="text-xs text-gray-500 ml-16 mt-1">Perangkat yang aktif</div>
+        </div>
+
+        <div class="bg-[#F6FAF7] rounded-2xl p-6 border border-gray-200 shadow-sm flex flex-col justify-center h-40 transition-transform hover:scale-[1.02]">
+            <div class="flex items-center space-x-4 mb-2">
+                <div class="bg-green-100 p-3 rounded-xl text-green-600">
+                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+                </div>
+                <div class="text-4xl font-extrabold text-green-600">{{ total_online }}</div>
+            </div>
+            <div class="text-sm font-semibold text-gray-700 ml-16 mt-1">Total Device Online</div>
+            <div class="text-xs text-gray-500 ml-16 mt-1">Terkoneksi ke sistem pusat</div>
+        </div>
+
+        <div class="bg-[#FFF8F3] rounded-2xl p-6 border border-gray-200 shadow-sm flex flex-col justify-center h-40 transition-transform hover:scale-[1.02]">
+            <div class="flex items-center space-x-4 mb-2">
+                <div class="bg-orange-100 p-3 rounded-xl text-orange-500">
+                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                </div>
+                <div class="text-4xl font-extrabold text-orange-500">{{ total_offline }}</div>
+            </div>
+            <div class="text-sm font-semibold text-gray-700 ml-16 mt-1">Total Device Offline</div>
+            <div class="text-xs text-gray-500 ml-16 mt-1">Gagal terhubung / Timeout</div>
+        </div>
+    </div>
+
+    <!-- Tabel Daftar Forti -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+        <div class="px-6 py-5 border-b border-gray-100">
+            <h3 class="text-xl font-bold text-gray-900">Daftar Perangkat</h3>
+        </div>
+        
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-100">
+                <thead>
+                    <tr class="bg-gray-50/50">
+                        <th class="px-6 py-4 text-left text-sm font-semibold text-gray-600">Device</th>
+                        <th class="px-6 py-4 text-center text-sm font-semibold text-gray-600">Total Port Aktif</th>
+                        <th class="px-6 py-4 text-center text-sm font-semibold text-gray-600">Total Policy</th>
+                        <th class="px-6 py-4 text-center text-sm font-semibold text-gray-600">Policy Tanpa Hit (0)</th>
+                        <th class="px-6 py-4 text-center text-sm font-semibold text-gray-600">Aksi</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100 bg-white">
+                    {% for device in devices %}
+                    <tr class="hover:bg-gray-50/50 transition-colors">
+                        <td class="px-6 py-4">
+                            <div class="text-sm font-bold text-gray-900">{{ device.name }}</div>
+                            <div class="text-xs text-gray-500 mt-1">{{ device.ip_address }}</div>
+                        </td>
+                        
+                        {% if device.statistics %}
+                            <td class="px-6 py-4 text-center text-sm font-medium text-gray-700">{{ device.statistics.total_interfaces_up }}</td>
+                            <td class="px-6 py-4 text-center text-sm font-medium text-gray-700">{{ device.statistics.total_policies }}</td>
+                            <td class="px-6 py-4 text-center">
+                                <span class="inline-block px-4 py-1.5 text-sm font-bold rounded-full bg-[#F49A25] text-white shadow-sm">
+                                    {{ device.statistics.never_used_policies_count }}
+                                </span>
+                            </td>
+                        {% else %}
+                            <td colspan="3" class="px-6 py-4 text-center text-sm text-gray-400 italic">Belum disinkronisasi</td>
+                        {% endif %}
+                        
+                        <td class="px-6 py-4 text-center">
+                            <a href="{% url 'compliance:scan' device.id %}" class="inline-flex items-center px-4 py-1.5 border-2 border-brand-active text-brand-active rounded-lg text-sm font-bold hover:bg-brand-active hover:text-white transition-colors focus:outline-none">
+                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path></svg>
+                                Scan
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="px-6 py-8 text-center text-gray-500">Belum ada perangkat terdaftar.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if devices.has_other_pages %}
+        <div class="px-6 py-4 border-t border-gray-100 flex items-center justify-between bg-gray-50/50">
+            <span class="text-sm font-medium text-gray-500">Halaman <span class="text-gray-900 font-bold">{{ devices.number }}</span> dari <span class="text-gray-900">{{ devices.paginator.num_pages }}</span></span>
+            <div class="space-x-2 flex">
+                {% if devices.has_previous %}
+                    <a href="?page={{ devices.previous_page_number }}" class="px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-100 rounded-md text-sm font-medium text-gray-700 shadow-sm transition-colors">&laquo; Prev</a>
+                {% endif %}
+                {% if devices.has_next %}
+                    <a href="?page={{ devices.next_page_number }}" class="px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-100 rounded-md text-sm font-medium text-gray-700 shadow-sm transition-colors">Next &raquo;</a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+</div>
+{% endblock %}
+

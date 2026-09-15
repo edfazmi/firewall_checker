@@ -1,0 +1,241 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Dashboard{% endblock %} - SIKAF PTBA</title>
+    
+    <!-- CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Tailwind Custom Configuration -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: { 
+                            sidebar: '#0B1B3D', 
+                            active: '#1A56DB',
+                            yellow: '#FFC107'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- Custom Styles -->
+    <style>
+        /* Sembunyikan scrollbar tapi tetap bisa di-scroll */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="bg-[#F8F9FB] text-gray-800 font-sans antialiased flex h-screen overflow-hidden relative">
+
+    <!-- Toast & Overlay -->
+    <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-3"></div>
+    <div id="sidebarOverlay" class="fixed inset-0 bg-black opacity-50 z-40 hidden md:hidden"></div>
+
+    <!-- ================= SIDEBAR ================= -->
+    <aside id="sidebar" class="fixed inset-y-0 left-0 z-50 w-64 bg-brand-sidebar text-white flex flex-col transform -translate-x-full md:relative md:translate-x-0 transition duration-200 ease-in-out shadow-xl z-50">
+        
+        <!-- Bagian Logo -->
+        <div class="h-20 flex items-center justify-center border-b border-[#1A2E5E] relative overflow-hidden">
+            <!-- Posisi absolute untuk mencegah padding kosong berlebih di bawah logo -->
+            <img src="{% static 'images/logo2-ptba.png' %}" alt="Logo PTBA" class="absolute top-3 left-1/2 transform -translate-x-1/2 w-[85%] pointer-events-none">
+            
+            <button id="closeSidebarBtn" class="md:hidden absolute right-4 top-6 text-gray-400 hover:text-white z-20 bg-brand-sidebar rounded-full p-1">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+        
+        <!-- Menu Navigasi -->
+        <nav class="flex-1 px-4 py-8 space-y-3 overflow-y-auto no-scrollbar">
+            
+            {% url 'dashboard:index' as url_dash %}
+            <a href="{{ url_dash }}" class="flex items-center px-4 py-3 rounded-xl transition-colors font-medium text-sm {% if request.path == url_dash %}bg-brand-active text-white shadow-md{% else %}text-gray-400 hover:bg-gray-800 hover:text-gray-100{% endif %}">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+                </svg> 
+                Dashboard
+            </a>
+
+            {% url 'devices:list' as url_dev %}
+            <a href="{{ url_dev }}" class="flex items-center px-4 py-3 rounded-xl transition-colors font-medium text-sm {% if request.path == url_dev %}bg-brand-active text-white shadow-md{% else %}text-gray-400 hover:bg-gray-800 hover:text-gray-100{% endif %}">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"></path>
+                </svg> 
+                Device
+            </a>
+
+            {% url 'compliance:rule_list' as url_rule %}
+            <a href="{{ url_rule }}" class="flex items-center px-4 py-3 rounded-xl transition-colors font-medium text-sm {% if request.path == url_rule %}bg-brand-active text-white shadow-md{% else %}text-gray-400 hover:bg-gray-800 hover:text-gray-100{% endif %}">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                </svg> 
+                Compliance Engine
+            </a>
+        </nav>
+
+        <!-- Kontak / Footer Sidebar -->
+        <div class="px-6 py-6 border-t border-[#1A2E5E]">
+            <h4 class="text-xs font-semibold text-gray-400 mb-3 uppercase tracking-wider">Contact Person</h4>
+            <div class="space-y-2 text-xs text-gray-300">
+                <div class="flex items-center">
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg> 
+                    phaedraaldimno@gmail.com
+                </div>
+                <div class="flex items-center">
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg> 
+                    edfaazmi@gmail.com
+                </div>
+                <div class="flex items-center">
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg> 
+                    zzarimaahtullah@gmail.com
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- ================= MAIN CONTENT ================= -->
+    <main class="flex-1 flex flex-col h-screen overflow-hidden relative">
+        
+        <!-- HEADER TOP BAR -->
+        <header class="h-20 bg-white border-b border-gray-200 flex items-center justify-between px-6 md:px-10 z-10 w-full shadow-sm">
+            
+            <!-- Kiri: Tombol Mobile & Judul Dinamis -->
+            <div class="flex items-center">
+                <button id="mobileMenuBtn" class="mr-4 md:hidden text-gray-600 focus:outline-none hover:text-gray-900">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                    </svg>
+                </button>
+                
+                <div>
+                    <h2 class="text-xl font-bold text-brand-sidebar tracking-tight">{% block header_title %}Dashboard{% endblock %}</h2>
+                    <p class="text-xs text-gray-500 font-medium mt-0.5">{% block header_subtitle %}Overview dan metrik utama sistem{% endblock %}</p>
+                </div>
+            </div>
+            
+            <!-- Kanan: Notifikasi & Profil User -->
+            <div class="flex items-center space-x-6">
+                <!-- Ikon Notifikasi -->
+                <a href="{% url 'compliance:notification_devices' %}" class="relative text-brand-sidebar hover:text-brand-active transition-colors" id="bellIcon">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
+                    </svg>
+                    <div id="notifBadgeContainer">
+                        {% if unread_notifications_count > 0 %}
+                            <span id="notifCountStr" class="absolute top-0 right-0 inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-bold leading-none text-white transform translate-x-1/4 -translate-y-1/4 bg-blue-600 rounded-full border-2 border-white">
+                                {{ unread_notifications_count }}
+                            </span>
+                        {% endif %}
+                    </div>
+                </a>
+
+                <!-- Profil User & Logout -->
+                {% if user.is_authenticated %}
+                    <a href="{% url 'kelola_akun' %}" class="flex items-center border-l border-gray-200 pl-6 space-x-3 cursor-pointer hover:opacity-80 transition-opacity">
+                        <div class="w-10 h-10 rounded-full bg-brand-sidebar text-white flex items-center justify-center font-bold text-sm">
+                            {{ user.first_name|default:user.username|slice:":2"|upper }}
+                        </div>
+                        <div class="hidden md:block text-left">
+                            <div class="text-sm font-bold text-gray-900 leading-tight">{{ user.get_full_name|default:user.username }}</div>
+                            <div class="text-xs text-gray-500">Admin</div>
+                        </div>
+                    </a>
+
+                    <form method="POST" action="{% url 'authentication:logout' %}" class="inline">
+                        {% csrf_token %}
+                        <button type="submit" class="flex items-center text-sm text-red-500 font-semibold hover:text-red-700 transition-colors ml-4">
+                            <svg class="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+                            </svg>
+                            Logout
+                        </button>
+                    </form>
+                {% endif %}
+            </div>
+        </header>
+
+        <!-- KONTEN HALAMAN -->
+        <div class="flex-1 overflow-auto p-4 md:p-8">
+            {% block content %}{% endblock %}
+            
+            <footer class="mt-8 text-center text-xs text-gray-500 pb-4">
+                &copy; {{ current_month_year|slice:"-4:" }} Bukit Asam (Persero) Tbk. All rights reserved.
+            </footer>
+        </div>
+    </main>
+
+    <!-- ================= SCRIPTS ================= -->
+    <script>
+        // Script untuk Interaksi Sidebar (Mobile)
+        document.addEventListener("DOMContentLoaded", function() {
+            const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+            const sidebar = document.getElementById('sidebar');
+            const sidebarOverlay = document.getElementById('sidebarOverlay');
+            const closeSidebarBtn = document.getElementById('closeSidebarBtn');
+
+            function toggleSidebar() {
+                sidebar.classList.toggle('-translate-x-full');
+                sidebarOverlay.classList.toggle('hidden');
+            }
+
+            if(mobileMenuBtn) mobileMenuBtn.addEventListener('click', toggleSidebar);
+            if(sidebarOverlay) sidebarOverlay.addEventListener('click', toggleSidebar);
+            if(closeSidebarBtn) closeSidebarBtn.addEventListener('click', toggleSidebar);
+        });
+    </script>
+
+    {% if user.is_authenticated %}
+    <script>
+        // Script untuk Real-time Notification Badge
+        document.addEventListener("DOMContentLoaded", function() {
+            let badgeEl = document.getElementById('notifCountStr');
+            let currentNotifCount = parseInt(badgeEl ? badgeEl.innerText : "0");
+            
+            function fetchNotifications() {
+                fetch('{% url "dashboard:api_notif_count" %}')
+                .then(response => response.json())
+                .then(data => {
+                    const newCount = data.count;
+                    const badgeContainer = document.getElementById('notifBadgeContainer');
+                    
+                    if (newCount > 0) {
+                        badgeContainer.innerHTML = `<span id="notifCountStr" class="absolute top-0 right-0 inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-bold leading-none text-white transform translate-x-1/4 -translate-y-1/4 bg-blue-600 rounded-full border-2 border-white">${newCount}</span>`;
+                        
+                        // Mainkan animasi pulse pada ikon bel jika ada notifikasi baru
+                        if (newCount > currentNotifCount) {
+                            const bellIcon = document.getElementById('bellIcon');
+                            if(bellIcon) {
+                                bellIcon.classList.add('animate-pulse');
+                                setTimeout(() => bellIcon.classList.remove('animate-pulse'), 1000);
+                            }
+                        }
+                    } else {
+                        badgeContainer.innerHTML = ''; // Kosongkan jika 0
+                    }
+                    
+                    currentNotifCount = newCount; 
+                })
+                .catch(e => console.error('Gagal mengambil data notifikasi:', e));
+            }
+            
+            // Polling setiap 5 detik
+            setInterval(fetchNotifications, 5000);
+        });
+    </script>
+    {% endif %}
+
+    <!-- Block untuk injeksi script tambahan dari halaman anak (child template) -->
+    {% block extra_js %}{% endblock %}
+
+</body>
+</html>

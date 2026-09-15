@@ -1,0 +1,89 @@
+<!-- templates/devices/form.html -->
+{% extends 'base.html' %}
+
+{% block title %}{% if object %}Edit{% else %}Tambah{% endif %} Device{% endblock %}
+{% block header_title %}Manajemen Perangkat{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+    <div class="mb-6 border-b border-gray-100 pb-4">
+        <h3 class="text-xl font-semibold text-gray-800">
+            {% if object %}Edit Perangkat: {{ object.name }}{% else %}Tambah Perangkat Baru{% endif %}
+        </h3>
+        <p class="text-sm text-gray-500 mt-1">Masukkan kredensial API FortiGate. Token akan disimpan dalam format terenkripsi.</p>
+    </div>
+
+    <form method="POST" class="space-y-6">
+        {% csrf_token %}
+        
+        <!-- Field Nama -->
+        <div>
+            <label for="{{ form.name.id_for_label }}" class="block text-sm font-medium text-gray-700">Nama Perangkat</label>
+            {{ form.name }}
+            <p class="mt-1 text-xs text-gray-500">{{ form.name.help_text }}</p>
+            {% if form.name.errors %}
+                <p class="mt-1 text-sm text-red-600">{{ form.name.errors.0 }}</p>
+            {% endif %}
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+            <!-- Field IP Address -->
+            <div>
+                <label for="{{ form.ip_address.id_for_label }}" class="block text-sm font-medium text-gray-700">IP Management</label>
+                {{ form.ip_address }}
+                <p class="mt-1 text-xs text-gray-500">{{ form.ip_address.help_text }}</p>
+                {% if form.ip_address.errors %}
+                    <p class="mt-1 text-sm text-red-600">{{ form.ip_address.errors.0 }}</p>
+                {% endif %}
+            </div>
+
+            <!-- Field Port -->
+            <div>
+                <label for="{{ form.port.id_for_label }}" class="block text-sm font-medium text-gray-700">Port API (HTTPS)</label>
+                {{ form.port }}
+                <p class="mt-1 text-xs text-gray-500">{{ form.port.help_text }}</p>
+                {% if form.port.errors %}
+                    <p class="mt-1 text-sm text-red-600">{{ form.port.errors.0 }}</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Field API Token -->
+        <div>
+            <label for="{{ form.api_token.id_for_label }}" class="block text-sm font-medium text-gray-700">API Token</label>
+            {{ form.api_token }}
+            <p class="mt-1 text-xs text-gray-500">{{ form.api_token.help_text }}</p>
+            {% if form.api_token.errors %}
+                <p class="mt-1 text-sm text-red-600">{{ form.api_token.errors.0 }}</p>
+            {% endif %}
+            {% if object %}
+                <p class="mt-2 text-xs text-yellow-600 bg-yellow-50 p-2 rounded border border-yellow-200">
+                    Catatan: Token tidak ditampilkan untuk alasan keamanan. Jika Anda mengisi kolom ini saat edit, token lama akan ditimpa.
+                </p>
+            {% endif %}
+        </div>
+
+        <!-- Tombol Aksi -->
+        <div class="flex justify-end space-x-3 pt-4 border-t border-gray-100">
+            <a href="{% url 'devices:list' %}" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors">
+                Batal
+            </a>
+            <button type="submit" class="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors">
+                Simpan Perangkat
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Styling prosedural sederhana untuk menambahkan class Tailwind ke input form bawaan Django
+    document.addEventListener("DOMContentLoaded", function() {
+        const inputs = document.querySelectorAll('input[type="text"], input[type="url"], input[type="password"], input[type="number"]');
+        for (let i = 0; i < inputs.length; i++) {
+            inputs[i].className = 'mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-brand-500 focus:border-brand-500 text-sm';
+        }
+    });
+</script>
+{% endblock %}
