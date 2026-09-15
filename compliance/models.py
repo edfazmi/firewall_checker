@@ -44,6 +44,7 @@ class ScanHistory(models.Model):
     scan_date = models.DateTimeField(auto_now_add=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='RUNNING')
     error_message = models.TextField(blank=True, null=True)
+    changes_detail = models.JSONField(default=dict, blank=True, null=True)
 
     class Meta:
         db_table = 'scan_histories'
@@ -74,16 +75,3 @@ class ConfigurationSnapshot(models.Model):
     policies_json = models.JSONField(default=dict)
     last_updated = models.DateTimeField(auto_now=True)
 
-class ChangeNotification(models.Model):
-    device = models.ForeignKey(Device, on_delete=models.CASCADE, related_name='change_notifications')
-    # Menautkan notifikasi langsung ke hasil scan
-    scan = models.ForeignKey(ScanHistory, on_delete=models.CASCADE, related_name='change_notifications', null=True, blank=True)
-    title = models.CharField(max_length=255)
-    message = models.TextField()
-    changes_detail = models.JSONField(default=dict) 
-    is_read = models.BooleanField(default=False)
-    created_at = models.DateTimeField(auto_now_add=True)
-    
-    class Meta:
-        db_table = 'change_notifications'
-        ordering = ['-created_at']

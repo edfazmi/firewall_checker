@@ -34,17 +34,6 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         
         return context
 
-class NotificationCountAPI(View):
-    def get(self, request, *args, **kwargs):
-        if request.user.is_authenticated:
-            try:
-                from compliance.models import ChangeNotification
-                count = ChangeNotification.objects.filter(is_read=False).count()
-                return JsonResponse({'count': count})
-            except Exception:
-                return JsonResponse({'count': 0})
-        return JsonResponse({'count': 0}, status=401)
-
 class PolicyDetailAPI(LoginRequiredMixin, View):
     """API dinamis untuk menarik seluruh detail 1 Policy langsung dari FortiGate."""
     def get(self, request, device_id, policy_id):

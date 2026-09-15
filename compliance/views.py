@@ -9,7 +9,7 @@ from django.db.models import Case, When, Value, IntegerField
 
 from devices.models import Device
 from core.exceptions import BaseAppException
-from .models import ScanHistory, ComplianceRule, ChangeNotification
+from .models import ScanHistory, ComplianceRule
 from .services import ComplianceScanner
 from .forms import ComplianceRuleForm
 
@@ -81,9 +81,6 @@ class ScanResultView(LoginRequiredMixin, DetailView):
             .order_by('-severity_order')
         )
         
-        # Ambil notifikasi perubahan terkait scan ini
-        context['notification'] = self.object.change_notifications.first()
-        
         return context
 
 
@@ -116,34 +113,6 @@ class RuleUpdateView(LoginRequiredMixin, UpdateView):
     def form_valid(self, form):
         messages.success(self.request, "Rule berhasil diperbarui.")
         return super().form_valid(form)
-
-
-# --- NOTIFICATION VIEWS ---
-
-class DeviceNotificationListView(LoginRequiredMixin, ListView):
-    """Menampilkan 1 perubahan = 1 notifikasi di list (bertumpuk)."""
-    model = ChangeNotification
-    template_name = 'compliance/notification_device_list.html'
-    context_object_name = 'notifications'
-    
-    def get_queryset(self):
-        # Tampilkan semua riwayat notifikasi, urutkan dari yang terbaru
-        return ChangeNotification.objects.select_related('device').all().order_by('-created_at')
-
-
-class ReadDeviceNotificationsView(LoginRequiredMixin, View):
-    """View untuk menandai SATU notifikasi dibaca dan redirect ke hasil scan spesifik."""
-    def get(self, request, notif_id):
-        notif = get_object_or_404(ChangeNotification, id=notif_id)
-        
-        # Tandai spesifik notifikasi ini sebagai dibaca
-        notif.is_read = True
-        notif.save()
-        
-        # Arahkan pengguna ke dokumen/hasil scan di mana perubahan ini direkam
-        if notif.scan:
-            return redirect('compliance:result', scan_id=notif.scan.id)
-        return redirect('devices:list')
 
 @csrf_exempt
 def hapus_hasil_scan_otomatis(request):

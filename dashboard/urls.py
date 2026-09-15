@@ -6,7 +6,6 @@ app_name = 'dashboard'
 
 urlpatterns = [
     path('', views.DashboardView.as_view(), name='index'),
-    path('api/notifications/count/', views.NotificationCountAPI.as_view(), name='api_notif_count'),
     # Endpoint baru untuk detail policy dinamis
     path('api/device/<int:device_id>/policy/<int:policy_id>/', views.PolicyDetailAPI.as_view(), name='api_policy_detail'),
 ]

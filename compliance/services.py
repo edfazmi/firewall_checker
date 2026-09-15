@@ -6,7 +6,7 @@ from core.services import BaseService
 from core.exceptions import ComplianceEngineError, FortiGateAPIError
 from devices.models import Device
 from devices.services import FortiGateAPIService
-from compliance.models import ComplianceRule, ScanHistory, Finding, PolicyRiskAssessment, ConfigurationSnapshot, ChangeNotification
+from compliance.models import ComplianceRule, ScanHistory, Finding, PolicyRiskAssessment, ConfigurationSnapshot
 import logging
 import hashlib
 import json
@@ -400,14 +400,9 @@ class ComplianceScanner(BaseService):
                 changes['modified'].append({'id': pid, 'name': new_p['name'], 'diffs': diffs})
                 
         if changes['added'] or changes['removed'] or changes['modified']:
-            total_changes = len(changes['added']) + len(changes['removed']) + len(changes['modified'])
-            ChangeNotification.objects.create(
-                device=self.device,
-                scan=self.scan_record,
-                title="Perubahan Konfigurasi Terdeteksi",
-                message=f"Auto-Scan mendeteksi {total_changes} perubahan pada Firewall Policy. Diterapkan oleh: {changes['author']}.",
-                changes_detail=changes
-            )
+        # Simpan riwayat perubahan langsung ke sesi scan saat ini
+            self.scan_record.changes_detail = changes
+            self.scan_record.save(update_fields=['changes_detail'])
             
         snapshot.policies_json = current_dict
         snapshot.save()
