@@ -29,6 +29,8 @@ class ComplianceScanner(BaseService):
     def _load_active_rules(self) -> Dict[str, ComplianceRule]:
         core_rules = [
             ('POL_OVERLY_PERMISSIVE', 'Overly Permissive Policy (ANY/ALL)', 'Policy mengizinkan trafik dengan cakupan Source atau Destination terbuka sangat luas (ANY/ALL).', 'HIGH', 'Ganti objek "all" dengan spesifik IP Address, Subnet, atau Address Group.'),
+            ('POL_ANY_INTF', 'Overly Permissive Interface (ANY)', 'Policy mengizinkan trafik dengan cakupan Incoming atau Outgoing Interface terbuka untuk semua (ANY).', 'HIGH', 'Spesifikasikan Incoming dan Outgoing interface yang diizinkan untuk melewati policy ini.'),
+            ('POL_ANY_SVC', 'Overly Permissive Service (ALL)', 'Policy mengizinkan trafik untuk semua layanan/port (ALL).', 'HIGH', 'Spesifikasikan layanan atau port yang benar-benar dibutuhkan.'),
             ('POL_UNUSED', 'Potentially Unused Policy', 'Firewall policy dalam status aktif namun tercatat memiliki 0 Hit (tidak pernah dilalui traffic).', 'INFO', 'Lakukan review bisnis. Policy ini mungkin perlu dinonaktifkan.'),
             ('POL_SHADOWED', 'Shadowed Policy (Tertimpa Urutan)', 'Policy spesifik diletakkan di bawah policy umum yang memiliki Action berlawanan, sehingga tidak akan pernah dieksekusi.', 'CRITICAL', 'Pindahkan letak Policy ini ke urutan di atas Policy yang membayanginya.'),
             ('POL_REDUNDANT', 'Potentially Redundant Policy', 'Subnet jaringan sepenuhnya tercakup di dalam policy lain yang memiliki action yang sama.', 'MEDIUM', 'Hapus Policy ini karena traffic-nya sudah diizinkan/diblokir secara lebih luas oleh policy lain.'),
@@ -110,6 +112,23 @@ class ComplianceScanner(BaseService):
                     "message": "Policy mengizinkan trafik dengan cakupan Source atau Destination sangat luas (ANY/ALL)."
                 })
 
+    def _rule_pol_any_intf(self, action, src_intf_set, dst_intf_set, target_name):
+        if action == 'accept' and 'POL_ANY_INTF' in self.active_rules:
+            has_any_src = any(intf.lower() == 'any' for intf in src_intf_set)
+            has_any_dst = any(intf.lower() == 'any' for intf in dst_intf_set)
+            if has_any_src or has_any_dst:
+                self._add_finding('POL_ANY_INTF', target_name, {
+                    "message": "Policy mengizinkan trafik dengan Incoming atau Outgoing interface sangat luas (ANY)."
+                })
+
+    def _rule_pol_any_svc(self, action, services_set, target_name):
+        if action == 'accept' and 'POL_ANY_SVC' in self.active_rules:
+            has_all_svc = any(svc.lower() == 'all' for svc in services_set)
+            if has_all_svc:
+                self._add_finding('POL_ANY_SVC', target_name, {
+                    "message": "Policy mengizinkan trafik dengan cakupan Service terbuka untuk semua (ALL)."
+                })
+
     def _rule_pol_unused(self, pol, pol_id, hit_dict):
         if 'POL_UNUSED' not in self.active_rules: return
         if str(pol.get('status', 'enable')).strip().lower() == 'disable': return
@@ -121,7 +140,6 @@ class ComplianceScanner(BaseService):
                 "message": "Policy aktif namun 0 hits.", "hit_count": 0, "last_used": hit_data.get('last_used', 'N/A')
             })
 
-   # Ganti fungsi rule multi-policy berikut:
     def _rule_pol_duplicate(self, pol_a, pol_b, action_a, action_b, combined_rel, target_b_name, info_json):
         if combined_rel == 'EXACT' and action_a == action_b and 'POL_DUPLICATE' in self.active_rules:
             info_json["message"] = "Duplikasi identik terdeteksi."
@@ -232,6 +250,8 @@ class ComplianceScanner(BaseService):
             # Execute single-policy rules
             self._rule_pol_no_desc(pol, target_name)
             self._rule_pol_overly_permissive(action, src_addrs_str, dst_addrs_str, target_name)
+            self._rule_pol_any_intf(action, src_intf, dst_intf, target_name)
+            self._rule_pol_any_svc(action, services, target_name)
 
             src_nets = self._get_networks_from_names(src_addrs_str)
             dst_nets = self._get_networks_from_names(dst_addrs_str)
@@ -273,7 +293,7 @@ class ComplianceScanner(BaseService):
 
 
     # -------------------------------------------------------------------------
-    # CORE ENGINE & HELPER METHODS (Dibiarkan tetap sama)
+    # CORE ENGINE & HELPER METHODS
     # -------------------------------------------------------------------------
 
     def has_config_changed(self):
@@ -400,7 +420,6 @@ class ComplianceScanner(BaseService):
                 changes['modified'].append({'id': pid, 'name': new_p['name'], 'diffs': diffs})
                 
         if changes['added'] or changes['removed'] or changes['modified']:
-        # Simpan riwayat perubahan langsung ke sesi scan saat ini
             self.scan_record.changes_detail = changes
             self.scan_record.save(update_fields=['changes_detail'])
             
@@ -487,46 +506,17 @@ class ComplianceScanner(BaseService):
         for pol in parsed_policies:
             factors = []
             severities_found = []
-            is_allow = pol['action'] == 'accept'
-            
-            has_broad_src = any(str(net) == '0.0.0.0/0' for net in pol['src_nets']) or any('any' in s.lower() for s in pol['src_intf'])
-            has_broad_dst = any(str(net) == '0.0.0.0/0' for net in pol['dst_nets']) or any('any' in s.lower() for s in pol['dst_intf'])
-            has_broad_svc = any('all' in s.lower() for s in pol['services'])
-
-            if is_allow:
-                if has_broad_src:
-                    factors.append("Cakupan Source luas (ANY/ALL)")
-                    severities_found.append('HIGH')
-                if has_broad_dst:
-                    factors.append("Cakupan Destination terbuka luas (ANY/ALL)")
-                    severities_found.append('HIGH')
-                if has_broad_svc:
-                    factors.append("Cakupan Service/Port terbuka untuk semua (ALL)")
-                    severities_found.append('HIGH')
             
             target_name = f"Policy ID {pol['id']} ({pol['name']})"
             related_findings = [f for f in self.findings_to_create if f.element_name == target_name]
             
+            # Hanya memasukkan nama rule (unik)
             for f in related_findings:
-                r_code = f.rule.rule_code
-                rel_id = f.element_details.get('related_policy_id', 'Unknown')
-                
-                if r_code == 'POL_UNUSED':
-                    factors.append("Policy tidak pernah dilalui traffic (0 Hit)")
-                    severities_found.append('INFO')
-                elif r_code == 'POL_DUPLICATE':
-                    factors.append(f"Duplikasi identik dengan Policy ID {rel_id}")
-                    severities_found.append('MEDIUM')
-                elif r_code == 'POL_REDUNDANT':
-                    factors.append(f"Redundant / tumpang tindih oleh Policy ID {rel_id}")
-                    severities_found.append('MEDIUM')
-                elif r_code == 'POL_SHADOWED':
-                    factors.append(f"Shadowed / tertimpa oleh Action dari Policy ID {rel_id}")
-                    severities_found.append('CRITICAL')
-                elif r_code == 'POL_CONFLICT':
-                    factors.append(f"Partial Overlap (Konflik Range) dengan Policy ID {rel_id}")
-                    severities_found.append('MEDIUM')
+                if f.rule.name not in factors:
+                    factors.append(f.rule.name)
+                severities_found.append(f.rule.severity)
 
+            # Kalkulasi Severity Level
             if 'CRITICAL' in severities_found:
                 severity = 'CRITICAL'
             elif 'HIGH' in severities_found:
@@ -535,8 +525,13 @@ class ComplianceScanner(BaseService):
                 severity = 'MEDIUM'
             elif 'LOW' in severities_found:
                 severity = 'LOW'
+            elif 'INFO' in severities_found:
+                severity = 'INFO'
             else:
                 severity = 'INFO'
+
+            # Jika list factors kosong, berarti tidak ada temuan apa-apa pada policy ini
+            if not factors:
                 factors.append("Konfigurasi beroperasi normal tanpa temuan konflik.")
 
             self.risks_to_create.append(PolicyRiskAssessment(
