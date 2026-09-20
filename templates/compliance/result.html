@@ -1,1617 +1,857 @@
-{% extends 'base.html' %} {% block title %}Hasil Audit - {{ scan.device.name
-}}{% endblock %} {% block header_title %}Hasil Scan & Audit{% endblock %} {%
-block header_subtitle %}Dashboard <span class="mx-1">&rsaquo;</span> Scan{%
-endblock %} {% block content %}
+{% extends 'base.html' %}
+
+{% block title %}Hasil Audit - {{ scan.device.name }}{% endblock %}
+
+{% block header_title %}Hasil Scan & Audit{% endblock %}
+{% block header_subtitle %}Dashboard <span class="mx-1">&rsaquo;</span> Scan{% endblock %}
+
+{% block content %}
 <style>
-  .custom-scrollbar::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-  }
-  .custom-scrollbar::-webkit-scrollbar-track {
-    background: #f1f5f9;
-    border-radius: 8px;
-  }
-  .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 8px;
-  }
-  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8;
-  }
-
-  /* Focus Mode UI yang lebih halus */
-  .table-focus-mode .finding-row:not(.active-row) {
-    opacity: 0.25;
-    filter: grayscale(80%);
-    pointer-events: none;
-    transition: all 0.4s ease;
-  }
-  .detail-row {
-    display: none;
-  }
-  .detail-row.active-detail {
-    display: table-row;
-    animation: slideDownFade 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  }
-
-  @keyframes slideDownFade {
-    from {
-      opacity: 0;
-      transform: translateY(-15px) scale(0.98);
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 8px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    
+    /* Focus Mode UI yang lebih halus */
+    .table-focus-mode .finding-row:not(.active-row) { opacity: 0.25; filter: grayscale(80%); pointer-events: none; transition: all 0.4s ease; }
+    .detail-row { display: none; }
+    .detail-row.active-detail { display: table-row; animation: slideDownFade 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+    
+    @keyframes slideDownFade { 
+        from { opacity: 0; transform: translateY(-15px) scale(0.98); } 
+        to { opacity: 1; transform: translateY(0) scale(1); } 
     }
-    to {
-      opacity: 1;
-      transform: translateY(0) scale(1);
-    }
-  }
 
-  /* CSS Counters untuk nomor otomatis tabel Deny */
-  .deny-table-wrapper {
-    counter-reset: deny-counter;
-  }
-  .deny-table-row {
-    counter-increment: deny-counter;
-  }
-  .deny-table-row .row-number::before {
-    content: counter(deny-counter);
-  }
+    /* CSS Counters untuk nomor otomatis tabel Deny */
+    .deny-table-wrapper { counter-reset: deny-counter; }
+    .deny-table-row { counter-increment: deny-counter; }
+    .deny-table-row .row-number::before { content: counter(deny-counter); }
 </style>
 
 <div class="max-w-7xl mx-auto space-y-6 pb-12">
-  <!-- TOP CARDS -->
-  <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
-    <div
-      class="md:col-span-3 bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex items-center space-x-5"
-    >
-      <div class="p-3 bg-gray-50 rounded-lg border border-gray-100">
-        <svg
-          class="w-8 h-8 text-brand-sidebar"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="1.5"
-            d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"
-          ></path>
-        </svg>
-      </div>
-      <div>
-        <h3 class="text-lg font-extrabold text-gray-900 tracking-tight">
-          {{ scan.device.name }}
-        </h3>
-        <p class="text-sm text-gray-500 mt-0.5">{{ scan.device.ip_address }}</p>
-      </div>
-    </div>
 
-    <div
-      class="md:col-span-1 bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex justify-around items-center"
-    >
-      <div class="text-center">
-        <div class="text-xs font-extrabold text-gray-900 mb-1">
-          Total Policy
-        </div>
-        <div class="text-3xl font-black text-gray-900">
-          {{ scan.device.statistics.total_policies|default:"0" }}
-        </div>
-        <div
-          class="text-[10px] font-bold text-gray-500 mt-1 uppercase tracking-widest"
-        >
-          Semua Policy
-        </div>
-      </div>
-      <div class="w-px h-12 bg-gray-200 mx-2"></div>
-      <div class="text-center">
-        <div class="text-xs font-extrabold text-red-600 mb-1">Temuan</div>
-        <div class="text-3xl font-black text-red-600">
-          {{ findings|length }}
-        </div>
-        <div
-          class="text-[10px] font-bold text-red-600 mt-1 uppercase tracking-widest"
-        >
-          Bermasalah
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- SEVERITY BREAKDOWN CARD -->
-  <div
-    class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex justify-between items-center text-center"
-  >
-    <div class="flex-1">
-      <div class="text-xs font-bold text-red-600 mb-2 uppercase tracking-wide">
-        Critical
-      </div>
-      <div class="text-2xl font-black text-red-600" id="count-critical">0</div>
-    </div>
-    <div class="w-px h-10 bg-gray-100"></div>
-    <div class="flex-1">
-      <div
-        class="text-xs font-bold text-orange-500 mb-2 uppercase tracking-wide"
-      >
-        High
-      </div>
-      <div class="text-2xl font-black text-orange-500" id="count-high">0</div>
-    </div>
-    <div class="w-px h-10 bg-gray-100"></div>
-    <div class="flex-1">
-      <div
-        class="text-xs font-bold text-yellow-500 mb-2 uppercase tracking-wide"
-      >
-        Medium
-      </div>
-      <div class="text-2xl font-black text-yellow-500" id="count-medium">0</div>
-    </div>
-    <div class="w-px h-10 bg-gray-100"></div>
-    <div class="flex-1">
-      <div class="text-xs font-bold text-blue-600 mb-2 uppercase tracking-wide">
-        Low
-      </div>
-      <div class="text-2xl font-black text-blue-600" id="count-low">0</div>
-    </div>
-    <div class="w-px h-10 bg-gray-100"></div>
-    <div class="flex-1">
-      <div class="text-xs font-bold text-gray-700 mb-2 uppercase tracking-wide">
-        Info
-      </div>
-      <div class="text-2xl font-black text-gray-700" id="count-info">0</div>
-    </div>
-  </div>
-
-  <!-- TAUTAN KEMBALI KE DASHBOARD -->
-  <div class="flex justify-end mt-2 mb-4">
-    <a
-      href="{% url 'dashboard:index' %}"
-      class="inline-flex items-center text-sm font-extrabold text-brand-active hover:text-blue-800 transition-colors bg-white px-4 py-2 rounded-lg border border-blue-200 shadow-sm"
-    >
-      <svg
-        class="w-4 h-4 mr-2"
-        fill="none"
-        stroke="currentColor"
-        viewBox="0 0 24 24"
-      >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          d="M10 19l-7-7m0 0l7-7m-7 7h18"
-        ></path>
-      </svg>
-      Kembali ke Dashboard
-    </a>
-  </div>
-
-  <!-- ========================================== -->
-  <!-- BAGIAN 1: INFO POLICY DIUBAH (DIFF BOX)    -->
-  <!-- ========================================== -->
-  {% if notification %}
-  <div
-    class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-8"
-  >
-    <div
-      class="px-6 py-4 border-b border-gray-200 bg-[#F8FAFC] flex items-center justify-between"
-    >
-      <div class="flex items-center space-x-3">
-        <div class="p-1.5 bg-blue-100 rounded-lg text-blue-600">
-          <svg
-            class="w-5 h-5"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-            ></path>
-          </svg>
-        </div>
-        <h3
-          class="text-sm font-extrabold text-gray-900 uppercase tracking-wider"
-        >
-          Perubahan Konfigurasi Terdeteksi
-        </h3>
-      </div>
-      <span
-        class="text-[11px] font-black bg-white text-gray-700 px-3 py-1.5 rounded-md border border-gray-200 shadow-sm flex items-center tracking-wide uppercase"
-      >
-        <svg
-          class="w-4 h-4 mr-1.5 text-gray-400"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-          ></path>
-        </svg>
-        OLEH: {{ notification.changes_detail.author|default:"SYSTEM / ADMIN" }}
-      </span>
-    </div>
-
-    <div class="p-6 bg-white">
-      <p
-        class="text-[13px] font-medium text-gray-600 mb-6 bg-gray-50 p-3 rounded-lg border border-gray-100"
-      >
-        {{ notification.message }}
-      </p>
-
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <!-- Box Added -->
-        {% if notification.changes_detail.added %}
-        <div
-          class="border border-green-200 bg-[#F0FDF4] rounded-xl p-5 shadow-sm"
-        >
-          <div
-            class="flex items-center space-x-2 mb-4 pb-3 border-b border-green-200/60"
-          >
-            <div
-              class="w-6 h-6 rounded-md bg-green-200 text-green-700 flex items-center justify-center font-black text-lg"
-            >
-              +
+    <!-- TOP CARDS -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div class="md:col-span-3 bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex items-center space-x-5">
+            <div class="p-3 bg-gray-50 rounded-lg border border-gray-100">
+                <svg class="w-8 h-8 text-brand-sidebar" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"></path></svg>
             </div>
-            <h5
-              class="text-[12px] font-black text-green-800 uppercase tracking-wider"
-            >
-              Policy Baru
-            </h5>
-          </div>
-          <div class="space-y-2">
-            {% for item in notification.changes_detail.added %}
-            <div
-              class="bg-white border border-green-100 rounded-lg p-3 text-[12px] shadow-sm"
-            >
-              <span class="font-black text-gray-900">ID: {{ item.id }}</span>
-              <span class="text-gray-500 font-medium block mt-0.5 truncate"
-                >{{ item.name }}</span
-              >
+            <div>
+                <h3 class="text-lg font-extrabold text-gray-900 tracking-tight">{{ scan.device.name }}</h3>
+                <p class="text-sm text-gray-500 mt-0.5">{{ scan.device.ip_address }}</p>
             </div>
-            {% endfor %}
-          </div>
         </div>
-        {% endif %}
 
-        <!-- Box Removed -->
-        {% if notification.changes_detail.removed %}
-        <div
-          class="border border-red-200 bg-[#FEF2F2] rounded-xl p-5 shadow-sm"
-        >
-          <div
-            class="flex items-center space-x-2 mb-4 pb-3 border-b border-red-200/60"
-          >
-            <div
-              class="w-6 h-6 rounded-md bg-red-200 text-red-700 flex items-center justify-center font-black text-lg"
-            >
-              -
+        <div class="md:col-span-1 bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex justify-around items-center">
+            <div class="text-center">
+                <div class="text-xs font-extrabold text-gray-900 mb-1">Total Policy</div>
+                <div class="text-3xl font-black text-gray-900">{{ scan.device.statistics.total_policies|default:"0" }}</div>
+                <div class="text-[10px] font-bold text-gray-500 mt-1 uppercase tracking-widest">Semua Policy</div>
             </div>
-            <h5
-              class="text-[12px] font-black text-red-800 uppercase tracking-wider"
-            >
-              Policy Dihapus
-            </h5>
-          </div>
-          <div class="space-y-2">
-            {% for item in notification.changes_detail.removed %}
-            <div
-              class="bg-white border border-red-100 rounded-lg p-3 text-[12px] shadow-sm"
-            >
-              <span class="font-black text-gray-900">ID: {{ item.id }}</span>
-              <span class="text-gray-500 font-medium block mt-0.5 truncate"
-                >{{ item.name }}</span
-              >
+            <div class="w-px h-12 bg-gray-200 mx-2"></div>
+            <div class="text-center">
+                <div class="text-xs font-extrabold text-red-600 mb-1">Temuan</div>
+                <div class="text-3xl font-black text-red-600">{{ findings|length }}</div>
+                <div class="text-[10px] font-bold text-red-600 mt-1 uppercase tracking-widest">Bermasalah</div>
             </div>
-            {% endfor %}
-          </div>
         </div>
-        {% endif %}
-
-        <!-- Box Modified -->
-        {% if notification.changes_detail.modified %}
-        <div
-          class="border border-yellow-200 bg-[#FEFCE8] rounded-xl p-5 shadow-sm {% if not notification.changes_detail.added and not notification.changes_detail.removed %}lg:col-span-3 {% elif not notification.changes_detail.added or not notification.changes_detail.removed %}lg:col-span-2{% endif %}"
-        >
-          <div
-            class="flex items-center space-x-2 mb-4 pb-3 border-b border-yellow-200/60"
-          >
-            <div
-              class="w-6 h-6 rounded-md bg-yellow-200 text-yellow-700 flex items-center justify-center font-black text-lg"
-            >
-              ~
-            </div>
-            <h5
-              class="text-[12px] font-black text-yellow-800 uppercase tracking-wider"
-            >
-              Policy Dimodifikasi
-            </h5>
-          </div>
-          <div class="space-y-3">
-            {% for item in notification.changes_detail.modified %}
-            <div
-              class="bg-white border border-yellow-100 rounded-lg p-3.5 shadow-sm"
-            >
-              <div
-                class="font-black text-gray-900 text-[12px] mb-2.5 pb-2 border-b border-gray-50"
-              >
-                ID: {{ item.id }} ({{ item.name }})
-              </div>
-              <ul class="space-y-1.5">
-                {% for diff in item.diffs %}
-                <li
-                  class="text-[11px] font-medium text-gray-600 flex items-start"
-                >
-                  <span class="text-yellow-500 mr-2 font-bold">▸</span> {{ diff
-                  }}
-                </li>
-                {% endfor %}
-              </ul>
-            </div>
-            {% endfor %}
-          </div>
-        </div>
-        {% endif %}
-      </div>
-    </div>
-  </div>
-  {% endif %}
-
-  <!-- TABEL TEMUAN UTAMA -->
-  <div
-    class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden"
-  >
-    <div
-      class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center"
-    >
-      <h3 class="text-sm font-extrabold text-gray-800 uppercase tracking-wider">
-        Daftar Pelanggaran Konfigurasi
-      </h3>
     </div>
 
-    <div
-      class="max-h-[800px] overflow-y-auto overflow-x-auto custom-scrollbar relative"
-    >
-      <table
-        class="min-w-full divide-y divide-gray-200 min-w-[900px]"
-        id="findingsTable"
-      >
-        <thead class="bg-white sticky top-0 z-20 shadow-sm">
-          <tr>
-            <th
-              class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-1/12"
-            >
-              Severity
-            </th>
-            <th
-              class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-3/12"
-            >
-              Temuan
-            </th>
-            <th
-              class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-4/12"
-            >
-              Policy Terkait
-            </th>
-            <th
-              class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-4/12"
-            >
-              Rekomendasi
-            </th>
-          </tr>
-        </thead>
-        <tbody
-          class="bg-white divide-y divide-gray-100 transition-all duration-300"
-          id="findingsBody"
-        >
-          {% for finding in findings %}
-          <!-- Baris Temuan Utama -->
-          <tr
-            class="hover:bg-gray-50 transition-all duration-300 finding-row bg-white"
-            id="row-{{ finding.id }}"
-            data-severity="{{ finding.rule.severity }}"
-          >
-            <td class="px-6 py-5 align-top relative z-10">
-              {% if finding.rule.severity == 'CRITICAL' %}<span
-                class="px-3 py-1 rounded-md text-xs font-bold border border-red-200 text-red-600 bg-white shadow-sm"
-                >CRITICAL</span
-              >
-              {% elif finding.rule.severity == 'HIGH' %}<span
-                class="px-3 py-1 rounded-md text-xs font-bold border border-orange-200 text-orange-500 bg-white shadow-sm"
-                >HIGH</span
-              >
-              {% elif finding.rule.severity == 'MEDIUM' %}<span
-                class="px-3 py-1 rounded-md text-xs font-bold border border-yellow-300 text-yellow-600 bg-white shadow-sm"
-                >MEDIUM</span
-              >
-              {% elif finding.rule.severity == 'LOW' %}<span
-                class="px-3 py-1 rounded-md text-xs font-bold border border-blue-200 text-blue-600 bg-white shadow-sm"
-                >LOW</span
-              >
-              {% else %}<span
-                class="px-3 py-1 rounded-md text-xs font-bold border border-gray-300 text-gray-600 bg-white shadow-sm"
-                >INFO</span
-              >{% endif %}
-            </td>
+    <!-- SEVERITY BREAKDOWN CARD -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex justify-between items-center text-center">
+        <div class="flex-1">
+            <div class="text-xs font-bold text-red-600 mb-2 uppercase tracking-wide">Critical</div>
+            <div class="text-2xl font-black text-red-600" id="count-critical">0</div>
+        </div>
+        <div class="w-px h-10 bg-gray-100"></div>
+        <div class="flex-1">
+            <div class="text-xs font-bold text-orange-500 mb-2 uppercase tracking-wide">High</div>
+            <div class="text-2xl font-black text-orange-500" id="count-high">0</div>
+        </div>
+        <div class="w-px h-10 bg-gray-100"></div>
+        <div class="flex-1">
+            <div class="text-xs font-bold text-yellow-500 mb-2 uppercase tracking-wide">Medium</div>
+            <div class="text-2xl font-black text-yellow-500" id="count-medium">0</div>
+        </div>
+        <div class="w-px h-10 bg-gray-100"></div>
+        <div class="flex-1">
+            <div class="text-xs font-bold text-blue-600 mb-2 uppercase tracking-wide">Low</div>
+            <div class="text-2xl font-black text-blue-600" id="count-low">0</div>
+        </div>
+        <div class="w-px h-10 bg-gray-100"></div>
+        <div class="flex-1">
+            <div class="text-xs font-bold text-gray-700 mb-2 uppercase tracking-wide">Info</div>
+            <div class="text-2xl font-black text-gray-700" id="count-info">0</div>
+        </div>
+    </div>
 
-            <td class="px-6 py-5 align-top relative z-10">
-              <h4 class="text-[13px] font-extrabold text-gray-900 leading-snug">
-                {{ finding.rule.name }}
-              </h4>
-              <p
-                class="mt-1.5 text-[13px] font-medium text-gray-600 leading-relaxed"
-              >
-                {{ finding.rule.description }}
-              </p>
+    <!-- TAUTAN KEMBALI KE DASHBOARD -->
+    <div class="flex justify-end mt-2 mb-4">
+        <a href="{% url 'dashboard:index' %}" class="inline-flex items-center text-sm font-extrabold text-brand-active hover:text-blue-800 transition-colors bg-white px-4 py-2 rounded-lg border border-blue-200 shadow-sm">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+            Kembali ke Dashboard
+        </a>
+    </div>
 
-              <!-- Menampilkan Pesan Relasi Jika Ada -->
-              {% if finding.element_details.message or
-              finding.element_details.reason %}
-              <div
-                class="mt-3 bg-gray-50 border border-gray-200 rounded-lg p-3 shadow-sm"
-              >
-                {% if finding.element_details.message %}
-                <div
-                  class="text-[12px] font-bold text-red-600 mb-1.5 flex items-start"
-                >
-                  <svg
-                    class="w-4 h-4 mr-1.5 flex-shrink-0"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                    ></path>
-                  </svg>
-                  {{ finding.element_details.message }}
+    <!-- ========================================== -->
+    <!-- BAGIAN 1: INFO POLICY DIUBAH (DIFF BOX)    -->
+    <!-- ========================================== -->
+    {% if notification %}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-8">
+        <div class="px-6 py-4 border-b border-gray-200 bg-[#F8FAFC] flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="p-1.5 bg-blue-100 rounded-lg text-blue-600">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                 </div>
-                {% endif %} {% if finding.element_details.reason %}
-                <div
-                  class="text-[11px] font-medium text-gray-500 italic flex items-start"
-                >
-                  <svg
-                    class="w-3.5 h-3.5 mr-1.5 flex-shrink-0 mt-0.5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M13 5l7 7-7 7M5 5l7 7-7 7"
-                    ></path>
-                  </svg>
-                  {{ finding.element_details.reason }}
+                <h3 class="text-sm font-extrabold text-gray-900 uppercase tracking-wider">Perubahan Konfigurasi Terdeteksi</h3>
+            </div>
+            <span class="text-[11px] font-black bg-white text-gray-700 px-3 py-1.5 rounded-md border border-gray-200 shadow-sm flex items-center tracking-wide uppercase">
+                <svg class="w-4 h-4 mr-1.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+                OLEH: {{ notification.changes_detail.author|default:"SYSTEM / ADMIN" }}
+            </span>
+        </div>
+        
+        <div class="p-6 bg-white">
+            <p class="text-[13px] font-medium text-gray-600 mb-6 bg-gray-50 p-3 rounded-lg border border-gray-100">{{ notification.message }}</p>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Box Added -->
+                {% if notification.changes_detail.added %}
+                <div class="border border-green-200 bg-[#F0FDF4] rounded-xl p-5 shadow-sm">
+                    <div class="flex items-center space-x-2 mb-4 pb-3 border-b border-green-200/60">
+                        <div class="w-6 h-6 rounded-md bg-green-200 text-green-700 flex items-center justify-center font-black text-lg">+</div>
+                        <h5 class="text-[12px] font-black text-green-800 uppercase tracking-wider">Policy Baru</h5>
+                    </div>
+                    <div class="space-y-2">
+                        {% for item in notification.changes_detail.added %}
+                        <div class="bg-white border border-green-100 rounded-lg p-3 text-[12px] shadow-sm">
+                            <span class="font-black text-gray-900">ID: {{ item.id }}</span>
+                            <span class="text-gray-500 font-medium block mt-0.5 truncate">{{ item.name }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
                 </div>
                 {% endif %}
-              </div>
-              {% endif %}
-            </td>
 
-            <td class="px-6 py-5 align-top relative z-10">
-              <div
-                class="border rounded-xl p-4 shadow-sm transition-all duration-300 finding-box {% if finding.rule.severity == 'CRITICAL' %} border-red-100 bg-[#FEF2F2] text-red-700 {% elif finding.rule.severity == 'HIGH' %} border-orange-100 bg-[#FFF7ED] text-orange-700 {% elif finding.rule.severity == 'MEDIUM' %} border-yellow-100 bg-[#FEFCE8] text-yellow-700 {% elif finding.rule.severity == 'LOW' %} border-blue-100 bg-[#EFF6FF] text-blue-800 {% else %} border-gray-200 bg-[#F8F9FA] text-gray-800 {% endif %}"
-              >
-                <!-- Ubah layout Policy Utama + Tombol jadi Flex Sejajar -->
-                <div class="flex items-center justify-between">
-                  <div
-                    class="font-extrabold text-[13px] element-name tracking-wide"
-                    id="element-{{ finding.id }}"
-                  >
-                    {{ finding.element_name }}
-                  </div>
-
-                  {% if 'POL_' in finding.rule.rule_code %}
-                  <button
-                    type="button"
-                    onclick="toggleDetail('{{ finding.id }}', '{{ scan.device.id }}', '{{ finding.element_name|escapejs }}', 'btn')"
-                    id="btn-{{ finding.id }}"
-                    class="ml-3 flex-shrink-0 inline-flex items-center px-2.5 py-1 text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 focus:outline-none transition-colors whitespace-nowrap"
-                  >
-                    <span id="btn-text-{{ finding.id }}">Lihat Detail</span>
-                    <svg
-                      id="btn-icon-{{ finding.id }}"
-                      class="w-3.5 h-3.5 ml-1 transition-transform duration-300"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2.5"
-                        d="M19 9l-7 7-7-7"
-                      ></path>
-                    </svg>
-                  </button>
-                  {% endif %}
-                </div>
-
-                <!-- Menampilkan Info & Tombol Relasi (Target ke-2) -->
-                {% if 'POL_' in finding.rule.rule_code and
-                finding.element_details.related_policy_id %}
-                <div class="mt-3 pt-3 border-t border-black/10">
-                  <div
-                    class="text-[10px] font-black uppercase mb-1.5 opacity-70"
-                  >
-                    Berhubungan dengan:
-                  </div>
-
-                  <div class="flex items-center justify-between">
-                    <div
-                      class="font-extrabold text-[12px] tracking-wide leading-tight pr-2"
-                    >
-                      Policy ID {{ finding.element_details.related_policy_id }}
-                      <span class="opacity-80 block md:inline"
-                        >({{ finding.element_details.related_policy_name
-                        }})</span
-                      >
+                <!-- Box Removed -->
+                {% if notification.changes_detail.removed %}
+                <div class="border border-red-200 bg-[#FEF2F2] rounded-xl p-5 shadow-sm">
+                    <div class="flex items-center space-x-2 mb-4 pb-3 border-b border-red-200/60">
+                        <div class="w-6 h-6 rounded-md bg-red-200 text-red-700 flex items-center justify-center font-black text-lg">-</div>
+                        <h5 class="text-[12px] font-black text-red-800 uppercase tracking-wider">Policy Dihapus</h5>
                     </div>
-
-                    <button
-                      type="button"
-                      onclick="toggleDetail('{{ finding.id }}', '{{ scan.device.id }}', 'Policy ID {{ finding.element_details.related_policy_id }} ({{ finding.element_details.related_policy_name|escapejs }})', 'btn-rel')"
-                      id="btn-rel-{{ finding.id }}"
-                      class="ml-3 flex-shrink-0 inline-flex items-center px-2.5 py-1 text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 focus:outline-none transition-colors whitespace-nowrap"
-                    >
-                      <span id="btn-rel-text-{{ finding.id }}"
-                        >Lihat Detail</span
-                      >
-                      <svg
-                        id="btn-rel-icon-{{ finding.id }}"
-                        class="w-3.5 h-3.5 ml-1 transition-transform duration-300"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                          stroke-width="2.5"
-                          d="M19 9l-7 7-7-7"
-                        ></path>
-                      </svg>
-                    </button>
-                  </div>
+                    <div class="space-y-2">
+                        {% for item in notification.changes_detail.removed %}
+                        <div class="bg-white border border-red-100 rounded-lg p-3 text-[12px] shadow-sm">
+                            <span class="font-black text-gray-900">ID: {{ item.id }}</span>
+                            <span class="text-gray-500 font-medium block mt-0.5 truncate">{{ item.name }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
                 </div>
                 {% endif %}
-              </div>
-            </td>
 
-            <td class="px-6 py-5 align-top relative z-10">
-              <div
-                class="border border-green-200 bg-[#F0FDF4] p-4 rounded-xl shadow-sm"
-              >
-                <p
-                  class="text-[13px] font-semibold text-green-900 leading-relaxed"
-                >
-                  {{ finding.rule.recommendation }}
-                </p>
-              </div>
-            </td>
-          </tr>
-
-          {% if 'POL_' in finding.rule.rule_code %}
-          <!-- Baris Detail Ekspansi (Hanya Untuk Policy) -->
-          <tr class="detail-row bg-gray-50/50" id="detail-{{ finding.id }}">
-            <td colspan="4" class="px-8 pb-8 pt-2">
-              <!-- Box Utama Detail -->
-              <div
-                class="border border-brand-active/20 rounded-2xl overflow-hidden bg-white shadow-[0_8px_30px_rgb(0,0,0,0.08)] relative"
-              >
-                <!-- Header Jendela Detail -->
-                <div
-                  class="bg-[#F8FAFC] px-6 py-4 border-b border-gray-200 flex justify-between items-center"
-                >
-                  <div class="flex items-center space-x-3">
-                    <div
-                      class="p-1.5 bg-brand-active/10 rounded-lg text-brand-active"
-                    >
-                      <svg
-                        class="w-5 h-5"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                          stroke-width="2"
-                          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                        ></path>
-                      </svg>
+                <!-- Box Modified -->
+                {% if notification.changes_detail.modified %}
+                <div class="border border-yellow-200 bg-[#FEFCE8] rounded-xl p-5 shadow-sm 
+                    {% if not notification.changes_detail.added and not notification.changes_detail.removed %}lg:col-span-3
+                    {% elif not notification.changes_detail.added or not notification.changes_detail.removed %}lg:col-span-2{% endif %}">
+                    <div class="flex items-center space-x-2 mb-4 pb-3 border-b border-yellow-200/60">
+                        <div class="w-6 h-6 rounded-md bg-yellow-200 text-yellow-700 flex items-center justify-center font-black text-lg">~</div>
+                        <h5 class="text-[12px] font-black text-yellow-800 uppercase tracking-wider">Policy Dimodifikasi</h5>
                     </div>
-                    <h4
-                      class="font-extrabold text-[15px] text-gray-900 tracking-tight"
-                      id="title-{{ finding.id }}"
-                    >
-                      Detail Policy
-                    </h4>
-                  </div>
+                    <div class="space-y-3">
+                        {% for item in notification.changes_detail.modified %}
+                        <div class="bg-white border border-yellow-100 rounded-lg p-3.5 shadow-sm">
+                            <div class="font-black text-gray-900 text-[12px] mb-2.5 pb-2 border-b border-gray-50">ID: {{ item.id }} ({{ item.name }})</div>
+                            <ul class="space-y-1.5">
+                                {% for diff in item.diffs %}
+                                <li class="text-[11px] font-medium text-gray-600 flex items-start">
+                                    <span class="text-yellow-500 mr-2 font-bold">▸</span> {{ diff }}
+                                </li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        {% endfor %}
+                    </div>
                 </div>
-
-                <!-- Loading State -->
-                <div id="loader-{{ finding.id }}" class="py-16 text-center">
-                  <svg
-                    class="animate-spin h-10 w-10 text-brand-active mx-auto mb-4"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      class="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      stroke-width="4"
-                    ></circle>
-                    <path
-                      class="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    ></path>
-                  </svg>
-                  <p
-                    class="text-[13px] font-bold text-gray-500 uppercase tracking-widest"
-                  >
-                    Menarik data dari perangkat...
-                  </p>
-                </div>
-
-                <!-- Konten Detail -->
-                <div id="content-{{ finding.id }}" class="hidden">
-                  <div
-                    class="grid grid-cols-1 lg:grid-cols-5 divide-y lg:divide-y-0 lg:divide-x divide-gray-100 text-[13px] bg-white"
-                  >
-                    <!-- Kolom 1: Basic Info -->
-                    <div class="p-6 space-y-5">
-                      <div>
-                        <span
-                          class="block text-[10px] uppercase font-extrabold text-gray-400 tracking-wider mb-1"
-                          >Policy ID / Name</span
-                        >
-                        <span
-                          class="block font-black text-gray-900 text-[14px]"
-                          id="p-id-name-{{ finding.id }}"
-                          >-</span
-                        >
-                      </div>
-                      <div class="grid grid-cols-2 gap-4">
-                        <div>
-                          <span
-                            class="block text-[10px] uppercase font-extrabold text-gray-400 tracking-wider mb-1"
-                            >Status</span
-                          >
-                          <span
-                            id="p-status-{{ finding.id }}"
-                            class="inline-block"
-                            >-</span
-                          >
-                        </div>
-                        <div>
-                          <span
-                            class="block text-[10px] uppercase font-extrabold text-gray-400 tracking-wider mb-1"
-                            >Action</span
-                          >
-                          <span
-                            id="p-action-{{ finding.id }}"
-                            class="block font-black"
-                            >-</span
-                          >
-                        </div>
-                        <div>
-                          <span
-                            class="block text-[10px] uppercase font-extrabold text-gray-400 tracking-wider mb-1"
-                            >NAT</span
-                          >
-                          <span
-                            id="p-nat-{{ finding.id }}"
-                            class="block font-bold text-gray-800"
-                            >-</span
-                          >
-                        </div>
-                        <div>
-                          <span
-                            class="block text-[10px] uppercase font-extrabold text-gray-400 tracking-wider mb-1"
-                            >Logging</span
-                          >
-                          <span id="p-log-{{ finding.id }}" class="inline-block"
-                            >-</span
-                          >
-                        </div>
-                      </div>
-                    </div>
-
-                    <!-- Kolom 2: Source -->
-                    <div class="p-6">
-                      <div
-                        class="text-[11px] uppercase font-black text-gray-900 tracking-wider mb-4 flex items-center"
-                      >
-                        <span
-                          class="w-2 h-2 rounded-full bg-blue-500 mr-2"
-                        ></span>
-                        Source ( C )
-                      </div>
-                      <div id="p-src-{{ finding.id }}"></div>
-                    </div>
-
-                    <!-- Kolom 3: Destination -->
-                    <div class="p-6">
-                      <div
-                        class="text-[11px] uppercase font-black text-gray-900 tracking-wider mb-4 flex items-center"
-                      >
-                        <span
-                          class="w-2 h-2 rounded-full bg-red-500 mr-2"
-                        ></span>
-                        Destination ( D )
-                      </div>
-                      <div id="p-dst-{{ finding.id }}"></div>
-                    </div>
-
-                    <!-- Kolom 4: Service & Schedule -->
-                    <div class="p-6 space-y-6">
-                      <div>
-                        <div
-                          class="text-[11px] uppercase font-black text-gray-900 tracking-wider mb-3 flex items-center"
-                        >
-                          <span
-                            class="w-2 h-2 rounded-full bg-purple-500 mr-2"
-                          ></span>
-                          Service
-                        </div>
-                        <div id="p-svc-{{ finding.id }}"></div>
-                      </div>
-                      <div>
-                        <div
-                          class="text-[11px] uppercase font-black text-gray-900 tracking-wider mb-2"
-                        >
-                          Schedule
-                        </div>
-                        <div
-                          id="p-sch-{{ finding.id }}"
-                          class="font-bold text-gray-700 bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200 inline-block"
-                        >
-                          always
-                        </div>
-                      </div>
-                    </div>
-
-                    <!-- Kolom 5: Security & IP Pool -->
-                    <div class="p-6 space-y-6 bg-gray-50/30">
-                      <div>
-                        <div
-                          class="text-[11px] uppercase font-black text-gray-900 tracking-wider mb-4 flex items-center"
-                        >
-                          <svg
-                            class="w-3.5 h-3.5 text-gray-700 mr-1.5"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              stroke-linecap="round"
-                              stroke-linejoin="round"
-                              stroke-width="2"
-                              d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
-                            ></path>
-                          </svg>
-                          Security Profiles
-                        </div>
-                        <div
-                          id="p-sec-{{ finding.id }}"
-                          class="space-y-2"
-                        ></div>
-                      </div>
-                      <div>
-                        <div
-                          class="text-[11px] uppercase font-black text-gray-900 tracking-wider mb-2"
-                        >
-                          IP Pool
-                        </div>
-                        <div id="p-pool-{{ finding.id }}"></div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- Footer: Komentar/Catatan -->
-                  <div
-                    class="bg-[#F8FAFC] border-t border-gray-200 p-5 px-6 flex items-start space-x-4"
-                  >
-                    <div
-                      class="p-2 bg-white rounded-full shadow-sm border border-gray-200 text-green-500 mt-1"
-                    >
-                      <svg
-                        class="w-5 h-5"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                          stroke-width="2"
-                          d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-                        ></path>
-                      </svg>
-                    </div>
-                    <div>
-                      <div
-                        class="text-[11px] font-black text-gray-900 mb-1.5 uppercase tracking-widest"
-                      >
-                        Komentar / Catatan dari perangkat
-                      </div>
-                      <div
-                        class="text-[13px] text-gray-600 font-medium leading-relaxed max-w-4xl"
-                        id="p-comment-{{ finding.id }}"
-                      ></div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </td>
-          </tr>
-          {% endif %} {% empty %}
-          <tr>
-            <td colspan="4" class="px-6 py-12 text-center">
-              <div
-                class="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-green-100 mb-4"
-              >
-                <svg
-                  class="h-8 w-8 text-green-600"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M5 13l4 4L19 7"
-                  ></path>
-                </svg>
-              </div>
-              <h3 class="text-base font-bold text-gray-900">
-                Konfigurasi Aman
-              </h3>
-              <p class="text-sm font-medium text-gray-500 mt-1">
-                Tidak ditemukan pelanggaran rule keamanan.
-              </p>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+                {% endif %}
+            </div>
+        </div>
     </div>
-  </div>
+    {% endif %}
 
-  <!-- ========================================== -->
-  <!-- BAGIAN 2.5: DAFTAR POLICY ACTION DENY      -->
-  <!-- ========================================== -->
-  <div
-    class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mt-8"
-  >
-    <div class="px-6 py-5 border-b border-gray-200 bg-white">
-      <h3 class="text-base font-extrabold text-gray-900">Daftar Policy Deny</h3>
-      <p class="text-[13px] text-gray-600 font-medium mt-1">
-        Berikut adalah daftar policy dengan tindakan DENY pada perangkat.
-      </p>
+    <!-- TABEL TEMUAN UTAMA -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+            <h3 class="text-sm font-extrabold text-gray-800 uppercase tracking-wider">Daftar Pelanggaran Konfigurasi</h3>
+        </div>
+        
+        <div class="max-h-[800px] overflow-y-auto overflow-x-auto custom-scrollbar relative">
+            <table class="min-w-full divide-y divide-gray-200 min-w-[900px]" id="findingsTable">
+                <thead class="bg-white sticky top-0 z-20 shadow-sm">
+                    <tr>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-1/12">Severity</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-3/12">Temuan</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-4/12">Policy Terkait</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-4/12">Rekomendasi</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-100 transition-all duration-300" id="findingsBody">
+                    
+                    {% for finding in findings %}
+                    <!-- Baris Temuan Utama -->
+                    <tr class="hover:bg-gray-50 transition-all duration-300 finding-row bg-white" id="row-{{ finding.id }}" data-severity="{{ finding.rule.severity }}">
+                        <td class="px-6 py-5 align-top relative z-10">
+                            {% if finding.rule.severity == 'CRITICAL' %}<span class="px-3 py-1 rounded-md text-xs font-bold border border-red-200 text-red-600 bg-white shadow-sm">CRITICAL</span>
+                            {% elif finding.rule.severity == 'HIGH' %}<span class="px-3 py-1 rounded-md text-xs font-bold border border-orange-200 text-orange-500 bg-white shadow-sm">HIGH</span>
+                            {% elif finding.rule.severity == 'MEDIUM' %}<span class="px-3 py-1 rounded-md text-xs font-bold border border-yellow-300 text-yellow-600 bg-white shadow-sm">MEDIUM</span>
+                            {% elif finding.rule.severity == 'LOW' %}<span class="px-3 py-1 rounded-md text-xs font-bold border border-blue-200 text-blue-600 bg-white shadow-sm">LOW</span>
+                            {% else %}<span class="px-3 py-1 rounded-md text-xs font-bold border border-gray-300 text-gray-600 bg-white shadow-sm">INFO</span>{% endif %}
+                        </td>
+                        
+                        <td class="px-6 py-5 align-top relative z-10">
+                            <h4 class="text-[13px] font-extrabold text-gray-900 leading-snug">{{ finding.rule.name }}</h4>
+                            <p class="mt-1.5 text-[13px] font-medium text-gray-600 leading-relaxed">{{ finding.rule.description }}</p>
+                            
+                            <!-- Menampilkan Pesan Relasi Jika Ada -->
+                            {% if finding.element_details.message or finding.element_details.reason %}
+                            <div class="mt-3 bg-gray-50 border border-gray-200 rounded-lg p-3 shadow-sm">
+                                {% if finding.element_details.message %}
+                                <div class="text-[12px] font-bold text-red-600 mb-1.5 flex items-start">
+                                    <svg class="w-4 h-4 mr-1.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                    {{ finding.element_details.message }}
+                                </div>
+                                {% endif %}
+                                {% if finding.element_details.reason %}
+                                <div class="text-[11px] font-medium text-gray-500 italic flex items-start">
+                                    <svg class="w-3.5 h-3.5 mr-1.5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"></path></svg>
+                                    {{ finding.element_details.reason }}
+                                </div>
+                                {% endif %}
+                            </div>
+                            {% endif %}
+                        </td>
+                        
+                        <td class="px-6 py-5 align-top relative z-10">
+                            <div class="border rounded-xl p-4 shadow-sm transition-all duration-300 finding-box
+                                {% if finding.rule.severity == 'CRITICAL' %} border-red-100 bg-[#FEF2F2] text-red-700
+                                {% elif finding.rule.severity == 'HIGH' %} border-orange-100 bg-[#FFF7ED] text-orange-700
+                                {% elif finding.rule.severity == 'MEDIUM' %} border-yellow-100 bg-[#FEFCE8] text-yellow-700
+                                {% elif finding.rule.severity == 'LOW' %} border-blue-100 bg-[#EFF6FF] text-blue-800
+                                {% else %} border-gray-200 bg-[#F8F9FA] text-gray-800 {% endif %}">
+                                
+                                <!-- Ubah layout Policy Utama + Tombol jadi Flex Sejajar -->
+                                <div class="flex items-center justify-between">
+                                    <div class="font-extrabold text-[13px] element-name tracking-wide" id="element-{{ finding.id }}">{{ finding.element_name }}</div>
+                                    
+                                    {% if 'POL_' in finding.rule.rule_code %}
+                                    <button type="button" onclick="toggleDetail('{{ finding.id }}', '{{ scan.device.id }}', '{{ finding.element_name|escapejs }}', 'btn')" id="btn-{{ finding.id }}" class="ml-3 flex-shrink-0 inline-flex items-center px-2.5 py-1 text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 focus:outline-none transition-colors whitespace-nowrap">
+                                        <span id="btn-text-{{ finding.id }}">Lihat Detail</span>
+                                        <svg id="btn-icon-{{ finding.id }}" class="w-3.5 h-3.5 ml-1 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
+                                    </button>
+                                    {% endif %}
+                                </div>
+                                
+                                <!-- Menampilkan Info & Tombol Relasi (Target ke-2) -->
+                                {% if 'POL_' in finding.rule.rule_code and finding.element_details.related_policy_id %}
+                                <div class="mt-3 pt-3 border-t border-black/10">
+                                    <div class="text-[10px] font-black uppercase mb-1.5 opacity-70">Berhubungan dengan:</div>
+                                    
+                                    <div class="flex items-center justify-between">
+                                        <div class="font-extrabold text-[12px] tracking-wide leading-tight pr-2">Policy ID {{ finding.element_details.related_policy_id }} <span class="opacity-80 block md:inline">({{ finding.element_details.related_policy_name }})</span></div>
+                                        
+                                        <button type="button" onclick="toggleDetail('{{ finding.id }}', '{{ scan.device.id }}', 'Policy ID {{ finding.element_details.related_policy_id }} ({{ finding.element_details.related_policy_name|escapejs }})', 'btn-rel')" id="btn-rel-{{ finding.id }}" class="ml-3 flex-shrink-0 inline-flex items-center px-2.5 py-1 text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 focus:outline-none transition-colors whitespace-nowrap">
+                                            <span id="btn-rel-text-{{ finding.id }}">Lihat Detail</span>
+                                            <svg id="btn-rel-icon-{{ finding.id }}" class="w-3.5 h-3.5 ml-1 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
+                                        </button>
+                                    </div>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </td>
+                        
+                        <td class="px-6 py-5 align-top relative z-10">
+                            <div class="border border-green-200 bg-[#F0FDF4] p-4 rounded-xl shadow-sm">
+                                <p class="text-[13px] font-semibold text-green-900 leading-relaxed">{{ finding.rule.recommendation }}</p>
+                            </div>
+                        </td>
+                    </tr>
+
+                    {% if 'POL_' in finding.rule.rule_code %}
+                    <!-- Baris Detail Ekspansi (Hanya Untuk Policy) -->
+                    <tr class="detail-row bg-gray-50/50" id="detail-{{ finding.id }}">
+                        <td colspan="4" class="px-8 pb-8 pt-2">
+                            
+                            <!-- Box Utama Detail -->
+                            <div class="border border-brand-active/20 rounded-2xl overflow-hidden bg-white shadow-[0_8px_30px_rgb(0,0,0,0.08)] relative">
+                                
+                                <!-- Header Jendela Detail -->
+                                <div class="bg-[#F8FAFC] px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                                    <div class="flex items-center space-x-3">
+                                        <div class="p-1.5 bg-brand-active/10 rounded-lg text-brand-active">
+                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                                        </div>
+                                        <h4 class="font-extrabold text-[15px] text-gray-900 tracking-tight" id="title-{{ finding.id }}">Detail Policy</h4>
+                                    </div>
+                                </div>
+
+                                <!-- Loading State -->
+                                <div id="loader-{{ finding.id }}" class="py-16 text-center">
+                                    <svg class="animate-spin h-10 w-10 text-brand-active mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                    <p class="text-[13px] font-bold text-gray-500 uppercase tracking-widest">Menarik data dari perangkat...</p>
+                                </div>
+
+                                <!-- Konten Detail -->
+                                <div id="content-{{ finding.id }}" class="hidden">
+                                    <div class="grid grid-cols-1 lg:grid-cols-5 divide-y lg:divide-y-0 lg:divide-x divide-gray-100 text-[13px] bg-white">
+                                        
+                                        <!-- Kolom 1: Basic Info -->
+                                        <div class="p-6 space-y-5">
+                                            <div>
+                                                <span class="block text-[10px] uppercase font-extrabold text-gray-400 tracking-wider mb-1">Policy ID / Name</span>
+                                                <span class="block font-black text-gray-900 text-[14px]" id="p-id-name-{{ finding.id }}">-</span>
+                                            </div>
+                                            <div class="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <span class="block text-[10px] uppercase font-extrabold text-gray-400 tracking-wider mb-1">Status</span>
+                                                    <span id="p-status-{{ finding.id }}" class="inline-block">-</span>
+                                                </div>
+                                                <div>
+                                                    <span class="block text-[10px] uppercase font-extrabold text-gray-400 tracking-wider mb-1">Action</span>
+                                                    <span id="p-action-{{ finding.id }}" class="block font-black">-</span>
+                                                </div>
+                                                <div>
+                                                    <span class="block text-[10px] uppercase font-extrabold text-gray-400 tracking-wider mb-1">NAT</span>
+                                                    <span id="p-nat-{{ finding.id }}" class="block font-bold text-gray-800">-</span>
+                                                </div>
+                                                <div>
+                                                    <span class="block text-[10px] uppercase font-extrabold text-gray-400 tracking-wider mb-1">Logging</span>
+                                                    <span id="p-log-{{ finding.id }}" class="inline-block">-</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Kolom 2: Source -->
+                                        <div class="p-6">
+                                            <div class="text-[11px] uppercase font-black text-gray-900 tracking-wider mb-4 flex items-center">
+                                                <span class="w-2 h-2 rounded-full bg-blue-500 mr-2"></span> Source ( C )
+                                            </div>
+                                            <div id="p-src-{{ finding.id }}"></div>
+                                        </div>
+
+                                        <!-- Kolom 3: Destination -->
+                                        <div class="p-6">
+                                            <div class="text-[11px] uppercase font-black text-gray-900 tracking-wider mb-4 flex items-center">
+                                                <span class="w-2 h-2 rounded-full bg-red-500 mr-2"></span> Destination ( D )
+                                            </div>
+                                            <div id="p-dst-{{ finding.id }}"></div>
+                                        </div>
+
+                                        <!-- Kolom 4: Service & Schedule -->
+                                        <div class="p-6 space-y-6">
+                                            <div>
+                                                <div class="text-[11px] uppercase font-black text-gray-900 tracking-wider mb-3 flex items-center">
+                                                    <span class="w-2 h-2 rounded-full bg-purple-500 mr-2"></span> Service
+                                                </div>
+                                                <div id="p-svc-{{ finding.id }}"></div>
+                                            </div>
+                                            <div>
+                                                <div class="text-[11px] uppercase font-black text-gray-900 tracking-wider mb-2">Schedule</div>
+                                                <div id="p-sch-{{ finding.id }}" class="font-bold text-gray-700 bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200 inline-block">always</div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Kolom 5: Security & IP Pool -->
+                                        <div class="p-6 space-y-6 bg-gray-50/30">
+                                            <div>
+                                                <div class="text-[11px] uppercase font-black text-gray-900 tracking-wider mb-4 flex items-center">
+                                                    <svg class="w-3.5 h-3.5 text-gray-700 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+                                                    Security Profiles
+                                                </div>
+                                                <div id="p-sec-{{ finding.id }}" class="space-y-2"></div>
+                                            </div>
+                                            <div>
+                                                <div class="text-[11px] uppercase font-black text-gray-900 tracking-wider mb-2">IP Pool</div>
+                                                <div id="p-pool-{{ finding.id }}"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Footer: Komentar/Catatan -->
+                                    <div class="bg-[#F8FAFC] border-t border-gray-200 p-5 px-6 flex items-start space-x-4">
+                                        <div class="p-2 bg-white rounded-full shadow-sm border border-gray-200 text-green-500 mt-1">
+                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg>
+                                        </div>
+                                        <div>
+                                            <div class="text-[11px] font-black text-gray-900 mb-1.5 uppercase tracking-widest">Komentar / Catatan dari perangkat</div>
+                                            <div class="text-[13px] text-gray-600 font-medium leading-relaxed max-w-4xl" id="p-comment-{{ finding.id }}"></div>
+                                        </div>
+                                    </div>
+
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endif %}
+                    
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="px-6 py-12 text-center">
+                            <div class="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-green-100 mb-4">
+                                <svg class="h-8 w-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                            </div>
+                            <h3 class="text-base font-bold text-gray-900">Konfigurasi Aman</h3>
+                            <p class="text-sm font-medium text-gray-500 mt-1">Tidak ditemukan pelanggaran rule keamanan.</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
 
-    <div class="overflow-x-auto custom-scrollbar deny-table-wrapper">
-      <table class="min-w-full divide-y divide-gray-200">
-        <thead class="bg-gray-100">
-          <tr>
-            <th
-              class="px-6 py-3 text-left text-[12px] font-bold text-gray-700 uppercase tracking-wider w-[5%]"
-            >
-              No
-            </th>
-            <th
-              class="px-6 py-3 text-left text-[12px] font-bold text-gray-700 uppercase tracking-wider w-[15%]"
-            >
-              ID Policy
-            </th>
-            <th
-              class="px-6 py-3 text-left text-[12px] font-bold text-gray-700 uppercase tracking-wider w-[25%]"
-            >
-              Nama Policy
-            </th>
-            <th
-              class="px-6 py-3 text-left text-[12px] font-bold text-gray-700 uppercase tracking-wider w-[10%]"
-            >
-              Status
-            </th>
-            <th
-              class="px-6 py-3 text-left text-[12px] font-bold text-gray-700 uppercase tracking-wider w-[35%]"
-            >
-              Deskripsi
-            </th>
-            <th
-              class="px-6 py-3 text-center text-[12px] font-bold text-gray-700 uppercase tracking-wider w-[10%]"
-            >
-              Aksi
-            </th>
-          </tr>
-        </thead>
-        <tbody
-          class="bg-white divide-y divide-gray-100 transition-all duration-300"
-        >
-          {% for pid, pol in scan.device.config_snapshot.policies_json.items %}
-          {% if pol.action == 'deny' %}
-          <!-- Row Deny -->
-          <tr
-            class="hover:bg-gray-50 transition-all duration-300 finding-row bg-white deny-table-row"
-            id="row-deny-{{ pid }}"
-          >
-            <!-- CSS Counter untuk No -->
-            <td
-              class="px-6 py-4 text-[13px] font-medium text-gray-900 align-middle row-number"
-            ></td>
-            <td
-              class="px-6 py-4 text-[13px] font-medium text-gray-900 align-middle"
-            >
-              Deny-{{ pid }}
-            </td>
-            <td
-              class="px-6 py-4 text-[13px] font-extrabold text-gray-900 align-middle"
-            >
-              {{ pol.name|default:"-" }}
-            </td>
-            <td class="px-6 py-4 align-middle">
-              {% if pol.status == 'enable' %}
-              <span
-                class="px-3 py-1 rounded-full text-[11px] font-bold bg-[#FEF2F2] text-red-600 border border-red-50"
-                >Aktif</span
-              >
-              {% else %}
-              <span
-                class="px-3 py-1 rounded-full text-[11px] font-bold bg-gray-100 text-gray-600 border border-gray-200"
-                >Nonaktif</span
-              >
-              {% endif %}
-            </td>
-            <td
-              class="px-6 py-4 text-[13px] font-medium text-gray-600 align-middle"
-            >
-              {{ pol.comments|default:"-" }}
-            </td>
-            <td class="px-6 py-4 align-middle text-center">
-              <button
-                type="button"
-                onclick="toggleDetail('deny-{{ pid }}', '{{ scan.device.id }}', 'Policy ID {{ pid }} ({{ pol.name|escapejs }})', 'btn-deny')"
-                class="inline-flex items-center justify-center px-4 py-1.5 text-[12px] font-bold text-blue-600 bg-white border border-blue-400 rounded-md hover:bg-blue-50 focus:outline-none transition-colors"
-              >
-                <span id="btn-deny-text-deny-{{ pid }}">Lihat detail</span>
-              </button>
-              <div class="finding-box hidden"></div>
-              <!-- Dummy Box untuk kompatibilitas JS -->
-            </td>
-          </tr>
-
-          <!-- Baris Detail Ekspansi (Untuk Policy Deny) -->
-          <tr class="detail-row bg-gray-50/50" id="detail-deny-{{ pid }}">
-            <td colspan="6" class="px-8 pb-8 pt-2">
-              <div
-                class="border border-brand-active/20 rounded-2xl overflow-hidden bg-white shadow-[0_8px_30px_rgb(0,0,0,0.08)] relative"
-              >
-                <div
-                  class="bg-[#F8FAFC] px-6 py-4 border-b border-gray-200 flex justify-between items-center"
-                >
-                  <div class="flex items-center space-x-3">
-                    <div
-                      class="p-1.5 bg-brand-active/10 rounded-lg text-brand-active"
-                    >
-                      <svg
-                        class="w-5 h-5"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                          stroke-width="2"
-                          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                        ></path>
-                      </svg>
-                    </div>
-                    <h4
-                      class="font-extrabold text-[15px] text-gray-900 tracking-tight"
-                      id="title-deny-{{ pid }}"
-                    >
-                      Detail Policy
-                    </h4>
-                  </div>
-                </div>
-
-                <div id="loader-deny-{{ pid }}" class="py-16 text-center">
-                  <svg
-                    class="animate-spin h-10 w-10 text-brand-active mx-auto mb-4"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      class="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      stroke-width="4"
-                    ></circle>
-                    <path
-                      class="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    ></path>
-                  </svg>
-                  <p
-                    class="text-[13px] font-bold text-gray-500 uppercase tracking-widest"
-                  >
-                    Menarik data dari perangkat...
-                  </p>
-                </div>
-
-                <div id="content-deny-{{ pid }}" class="hidden">
-                  <div
-                    class="grid grid-cols-1 lg:grid-cols-5 divide-y lg:divide-y-0 lg:divide-x divide-gray-100 text-[13px] bg-white"
-                  >
-                    <div class="p-6 space-y-5">
-                      <div>
-                        <span
-                          class="block text-[10px] uppercase font-extrabold text-gray-400 tracking-wider mb-1"
-                          >Policy ID / Name</span
-                        >
-                        <span
-                          class="block font-black text-gray-900 text-[14px]"
-                          id="p-id-name-deny-{{ pid }}"
-                          >-</span
-                        >
-                      </div>
-                      <div class="grid grid-cols-2 gap-4">
-                        <div>
-                          <span
-                            class="block text-[10px] uppercase font-extrabold text-gray-400 tracking-wider mb-1"
-                            >Status</span
-                          >
-                          <span
-                            id="p-status-deny-{{ pid }}"
-                            class="inline-block"
-                            >-</span
-                          >
-                        </div>
-                        <div>
-                          <span
-                            class="block text-[10px] uppercase font-extrabold text-gray-400 tracking-wider mb-1"
-                            >Action</span
-                          >
-                          <span
-                            id="p-action-deny-{{ pid }}"
-                            class="block font-black"
-                            >-</span
-                          >
-                        </div>
-                        <div>
-                          <span
-                            class="block text-[10px] uppercase font-extrabold text-gray-400 tracking-wider mb-1"
-                            >NAT</span
-                          >
-                          <span
-                            id="p-nat-deny-{{ pid }}"
-                            class="block font-bold text-gray-800"
-                            >-</span
-                          >
-                        </div>
-                        <div>
-                          <span
-                            class="block text-[10px] uppercase font-extrabold text-gray-400 tracking-wider mb-1"
-                            >Logging</span
-                          >
-                          <span id="p-log-deny-{{ pid }}" class="inline-block"
-                            >-</span
-                          >
-                        </div>
-                      </div>
-                    </div>
-
-                    <div class="p-6">
-                      <div
-                        class="text-[11px] uppercase font-black text-gray-900 tracking-wider mb-4 flex items-center"
-                      >
-                        <span
-                          class="w-2 h-2 rounded-full bg-blue-500 mr-2"
-                        ></span>
-                        Source ( C )
-                      </div>
-                      <div id="p-src-deny-{{ pid }}"></div>
-                    </div>
-
-                    <div class="p-6">
-                      <div
-                        class="text-[11px] uppercase font-black text-gray-900 tracking-wider mb-4 flex items-center"
-                      >
-                        <span
-                          class="w-2 h-2 rounded-full bg-red-500 mr-2"
-                        ></span>
-                        Destination ( D )
-                      </div>
-                      <div id="p-dst-deny-{{ pid }}"></div>
-                    </div>
-
-                    <div class="p-6 space-y-6">
-                      <div>
-                        <div
-                          class="text-[11px] uppercase font-black text-gray-900 tracking-wider mb-3 flex items-center"
-                        >
-                          <span
-                            class="w-2 h-2 rounded-full bg-purple-500 mr-2"
-                          ></span>
-                          Service
-                        </div>
-                        <div id="p-svc-deny-{{ pid }}"></div>
-                      </div>
-                      <div>
-                        <div
-                          class="text-[11px] uppercase font-black text-gray-900 tracking-wider mb-2"
-                        >
-                          Schedule
-                        </div>
-                        <div
-                          id="p-sch-deny-{{ pid }}"
-                          class="font-bold text-gray-700 bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200 inline-block"
-                        >
-                          always
-                        </div>
-                      </div>
-                    </div>
-
-                    <div class="p-6 space-y-6 bg-gray-50/30">
-                      <div>
-                        <div
-                          class="text-[11px] uppercase font-black text-gray-900 tracking-wider mb-4 flex items-center"
-                        >
-                          <svg
-                            class="w-3.5 h-3.5 text-gray-700 mr-1.5"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              stroke-linecap="round"
-                              stroke-linejoin="round"
-                              stroke-width="2"
-                              d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
-                            ></path>
-                          </svg>
-                          Security Profiles
-                        </div>
-                        <div id="p-sec-deny-{{ pid }}" class="space-y-2"></div>
-                      </div>
-                      <div>
-                        <div
-                          class="text-[11px] uppercase font-black text-gray-900 tracking-wider mb-2"
-                        >
-                          IP Pool
-                        </div>
-                        <div id="p-pool-deny-{{ pid }}"></div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div
-                    class="bg-[#F8FAFC] border-t border-gray-200 p-5 px-6 flex items-start space-x-4"
-                  >
-                    <div
-                      class="p-2 bg-white rounded-full shadow-sm border border-gray-200 text-green-500 mt-1"
-                    >
-                      <svg
-                        class="w-5 h-5"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                          stroke-width="2"
-                          d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-                        ></path>
-                      </svg>
-                    </div>
-                    <div>
-                      <div
-                        class="text-[11px] font-black text-gray-900 mb-1.5 uppercase tracking-widest"
-                      >
-                        Komentar / Catatan dari perangkat
-                      </div>
-                      <div
-                        class="text-[13px] text-gray-600 font-medium leading-relaxed max-w-4xl"
-                        id="p-comment-deny-{{ pid }}"
-                      ></div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </td>
-          </tr>
-          {% endif %} {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- ========================================== -->
-  <!-- BAGIAN 3: RINGKASAN EKSEKUSI PER POLICY    -->
-  <!-- ========================================== -->
-  <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mt-8">
-    <div class="mb-5">
-      <h3 class="text-base font-extrabold text-gray-900">
-        Ringkasan Eksekusi & Evaluasi per Policy
-      </h3>
-      <p class="text-[13px] text-gray-600 font-medium mt-1">
-        Rangkuman hasil analisis rule, anomali konfigurasi, dan status
-        operasional untuk setiap firewall policy.
-      </p>
-    </div>
-
-    <div
-      class="max-h-[500px] overflow-y-auto overflow-x-auto custom-scrollbar pr-2"
-    >
-      <div class="min-w-[800px]">
-        <!-- Headers Grid -->
-        <div
-          class="grid grid-cols-12 gap-4 mb-3 px-4 text-[11px] font-extrabold text-gray-500 uppercase tracking-wider"
-        >
-          <div class="col-span-3">Policy</div>
-          <div
-            class="col-span-2 text-center border-l border-r border-transparent"
-          >
-            Status Keamanan
-          </div>
-          <div class="col-span-7">Ringkasan Temuan / Catatan Evaluasi</div>
+    <!-- ========================================== -->
+    <!-- BAGIAN 2.5: DAFTAR POLICY ACTION DENY      -->
+    <!-- ========================================== -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mt-8">
+        <div class="px-6 py-5 border-b border-gray-200 bg-white">
+            <h3 class="text-base font-extrabold text-gray-900">Daftar Policy Deny</h3>
+            <p class="text-[13px] text-gray-600 font-medium mt-1">Berikut adalah daftar policy dengan tindakan DENY pada perangkat FortiGate.</p>
         </div>
 
-        <!-- Rows List -->
-        <div class="space-y-3">
-          {% for risk in policy_risks %}
-          <div
-            class="grid grid-cols-12 gap-0 rounded-xl border items-stretch overflow-hidden {% if risk.severity == 'CRITICAL' or risk.severity == 'HIGH' %} bg-[#FEF2F2] border-red-200 {% elif risk.severity == 'MEDIUM' %} bg-[#FFF7ED] border-orange-200 {% elif risk.severity == 'LOW' %} bg-[#F8FAFC] border-gray-200 {% elif risk.severity == 'INFO' %} bg-[#F0FDF4] border-green-200 {% else %} bg-white border-gray-200 {% endif %}"
-          >
-            <div
-              class="col-span-3 p-4 flex flex-col justify-center border-r {% if risk.severity == 'CRITICAL' or risk.severity == 'HIGH' %} border-red-100 {% elif risk.severity == 'MEDIUM' %} border-orange-100 {% elif risk.severity == 'LOW' %} border-gray-200 {% elif risk.severity == 'INFO' %} border-green-200 {% else %} border-gray-100 {% endif %}"
-            >
-              <div
-                class="text-[14px] font-extrabold {% if risk.severity == 'CRITICAL' or risk.severity == 'HIGH' %} text-red-600 {% elif risk.severity == 'MEDIUM' %} text-orange-600 {% elif risk.severity == 'LOW' %} text-gray-800 {% elif risk.severity == 'INFO' %} text-green-700 {% else %} text-gray-700 {% endif %}"
-              >
-                ID: {{ risk.policy_id }}
-              </div>
-              <div
-                class="text-[12px] font-medium text-gray-600 mt-1 leading-snug"
-              >
-                {{ risk.policy_name|default:"Tanpa Nama" }}
-              </div>
-            </div>
+        <div class="overflow-x-auto custom-scrollbar deny-table-wrapper">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-100">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-[12px] font-bold text-gray-700 uppercase tracking-wider w-[5%]">No</th>
+                        <th class="px-6 py-3 text-left text-[12px] font-bold text-gray-700 uppercase tracking-wider w-[15%]">ID Policy</th>
+                        <th class="px-6 py-3 text-left text-[12px] font-bold text-gray-700 uppercase tracking-wider w-[25%]">Nama Policy</th>
+                        <th class="px-6 py-3 text-left text-[12px] font-bold text-gray-700 uppercase tracking-wider w-[10%]">Status</th>
+                        <th class="px-6 py-3 text-left text-[12px] font-bold text-gray-700 uppercase tracking-wider w-[35%]">Deskripsi</th>
+                        <th class="px-6 py-3 text-center text-[12px] font-bold text-gray-700 uppercase tracking-wider w-[10%]">Aksi</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-100 transition-all duration-300">
+                    {% for pid, pol in scan.device.config_snapshot.policies_json.items %}
+                        {% if pol.action == 'deny' %}
+                        <!-- Row Deny -->
+                        <tr class="hover:bg-gray-50 transition-all duration-300 finding-row bg-white deny-table-row" id="row-deny-{{ pid }}">
+                            <!-- CSS Counter untuk No -->
+                            <td class="px-6 py-4 text-[13px] font-medium text-gray-900 align-middle row-number"></td>
+                            <td class="px-6 py-4 text-[13px] font-medium text-gray-900 align-middle">Deny-{{ pid }}</td>
+                            <td class="px-6 py-4 text-[13px] font-extrabold text-gray-900 align-middle">{{ pol.name|default:"-" }}</td>
+                            <td class="px-6 py-4 align-middle">
+                                {% if pol.status == 'enable' %}
+                                    <span class="px-3 py-1 rounded-full text-[11px] font-bold bg-[#FEF2F2] text-red-600 border border-red-50">Aktif</span>
+                                {% else %}
+                                    <span class="px-3 py-1 rounded-full text-[11px] font-bold bg-gray-100 text-gray-600 border border-gray-200">Nonaktif</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-6 py-4 text-[13px] font-medium text-gray-600 align-middle">
+                                {{ pol.comments|default:"-" }}
+                            </td>
+                            <td class="px-6 py-4 align-middle text-center">
+                                <button type="button" onclick="toggleDetail('deny-{{ pid }}', '{{ scan.device.id }}', 'Policy ID {{ pid }} ({{ pol.name|escapejs }})', 'btn-deny')" class="inline-flex items-center justify-center px-4 py-1.5 text-[12px] font-bold text-blue-600 bg-white border border-blue-400 rounded-md hover:bg-blue-50 focus:outline-none transition-colors">
+                                    <span id="btn-deny-text-deny-{{ pid }}">Lihat detail</span>
+                                </button>
+                                <div class="finding-box hidden"></div> <!-- Dummy Box untuk kompatibilitas JS -->
+                            </td>
+                        </tr>
 
-            <div
-              class="col-span-2 p-4 flex items-center justify-center border-r {% if risk.severity == 'CRITICAL' or risk.severity == 'HIGH' %} border-red-100 {% elif risk.severity == 'MEDIUM' %} border-orange-100 {% elif risk.severity == 'LOW' %} border-gray-200 {% elif risk.severity == 'INFO' %} border-green-200 {% else %} border-gray-100 {% endif %}"
-            >
-              <div
-                class="text-[13px] font-extrabold uppercase {% if risk.severity == 'CRITICAL' or risk.severity == 'HIGH' %} text-red-600 {% elif risk.severity == 'MEDIUM' %} text-orange-600 {% elif risk.severity == 'LOW' %} text-gray-800 {% elif risk.severity == 'INFO' %} text-green-700 {% else %} text-gray-600 {% endif %}"
-              >
-                {% if risk.severity == 'INFO' %}SAFE{% else %}{{ risk.severity
-                }}{% endif %}
-              </div>
-            </div>
-
-            <div class="col-span-7 p-4 flex flex-col justify-center">
-              {% if risk.contributing_factors %}
-              <ul
-                class="list-disc list-inside text-[12px] font-medium text-gray-700 space-y-1.5"
-              >
-                {% for factor in risk.contributing_factors %}
-                <li>{{ factor }}</li>
-                {% endfor %}
-              </ul>
-              {% else %}
-              <span class="text-[12px] text-gray-400 italic font-medium"
-                >Tidak ada rincian evaluasi tersedia.</span
-              >
-              {% endif %}
-            </div>
-          </div>
-          {% empty %}
-          <div class="text-center py-8 text-sm text-gray-500 font-medium">
-            Data ringkasan eksekusi belum tersedia.
-          </div>
-          {% endfor %}
+                        <!-- Baris Detail Ekspansi (Untuk Policy Deny) -->
+                        <tr class="detail-row bg-gray-50/50" id="detail-deny-{{ pid }}">
+                            <td colspan="6" class="px-8 pb-8 pt-2">
+                                <div class="border border-brand-active/20 rounded-2xl overflow-hidden bg-white shadow-[0_8px_30px_rgb(0,0,0,0.08)] relative">
+                                    <div class="bg-[#F8FAFC] px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                                        <div class="flex items-center space-x-3">
+                                            <div class="p-1.5 bg-brand-active/10 rounded-lg text-brand-active">
+                                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                                            </div>
+                                            <h4 class="font-extrabold text-[15px] text-gray-900 tracking-tight" id="title-deny-{{ pid }}">Detail Policy</h4>
+                                        </div>
+                                    </div>
+    
+                                    <div id="loader-deny-{{ pid }}" class="py-16 text-center">
+                                        <svg class="animate-spin h-10 w-10 text-brand-active mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                        <p class="text-[13px] font-bold text-gray-500 uppercase tracking-widest">Menarik data dari perangkat...</p>
+                                    </div>
+    
+                                    <div id="content-deny-{{ pid }}" class="hidden">
+                                        <div class="grid grid-cols-1 lg:grid-cols-5 divide-y lg:divide-y-0 lg:divide-x divide-gray-100 text-[13px] bg-white">
+                                            
+                                            <div class="p-6 space-y-5">
+                                                <div>
+                                                    <span class="block text-[10px] uppercase font-extrabold text-gray-400 tracking-wider mb-1">Policy ID / Name</span>
+                                                    <span class="block font-black text-gray-900 text-[14px]" id="p-id-name-deny-{{ pid }}">-</span>
+                                                </div>
+                                                <div class="grid grid-cols-2 gap-4">
+                                                    <div>
+                                                        <span class="block text-[10px] uppercase font-extrabold text-gray-400 tracking-wider mb-1">Status</span>
+                                                        <span id="p-status-deny-{{ pid }}" class="inline-block">-</span>
+                                                    </div>
+                                                    <div>
+                                                        <span class="block text-[10px] uppercase font-extrabold text-gray-400 tracking-wider mb-1">Action</span>
+                                                        <span id="p-action-deny-{{ pid }}" class="block font-black">-</span>
+                                                    </div>
+                                                    <div>
+                                                        <span class="block text-[10px] uppercase font-extrabold text-gray-400 tracking-wider mb-1">NAT</span>
+                                                        <span id="p-nat-deny-{{ pid }}" class="block font-bold text-gray-800">-</span>
+                                                    </div>
+                                                    <div>
+                                                        <span class="block text-[10px] uppercase font-extrabold text-gray-400 tracking-wider mb-1">Logging</span>
+                                                        <span id="p-log-deny-{{ pid }}" class="inline-block">-</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+    
+                                            <div class="p-6">
+                                                <div class="text-[11px] uppercase font-black text-gray-900 tracking-wider mb-4 flex items-center">
+                                                    <span class="w-2 h-2 rounded-full bg-blue-500 mr-2"></span> Source ( C )
+                                                </div>
+                                                <div id="p-src-deny-{{ pid }}"></div>
+                                            </div>
+    
+                                            <div class="p-6">
+                                                <div class="text-[11px] uppercase font-black text-gray-900 tracking-wider mb-4 flex items-center">
+                                                    <span class="w-2 h-2 rounded-full bg-red-500 mr-2"></span> Destination ( D )
+                                                </div>
+                                                <div id="p-dst-deny-{{ pid }}"></div>
+                                            </div>
+    
+                                            <div class="p-6 space-y-6">
+                                                <div>
+                                                    <div class="text-[11px] uppercase font-black text-gray-900 tracking-wider mb-3 flex items-center">
+                                                        <span class="w-2 h-2 rounded-full bg-purple-500 mr-2"></span> Service
+                                                    </div>
+                                                    <div id="p-svc-deny-{{ pid }}"></div>
+                                                </div>
+                                                <div>
+                                                    <div class="text-[11px] uppercase font-black text-gray-900 tracking-wider mb-2">Schedule</div>
+                                                    <div id="p-sch-deny-{{ pid }}" class="font-bold text-gray-700 bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200 inline-block">always</div>
+                                                </div>
+                                            </div>
+    
+                                            <div class="p-6 space-y-6 bg-gray-50/30">
+                                                <div>
+                                                    <div class="text-[11px] uppercase font-black text-gray-900 tracking-wider mb-4 flex items-center">
+                                                        <svg class="w-3.5 h-3.5 text-gray-700 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+                                                        Security Profiles
+                                                    </div>
+                                                    <div id="p-sec-deny-{{ pid }}" class="space-y-2"></div>
+                                                </div>
+                                                <div>
+                                                    <div class="text-[11px] uppercase font-black text-gray-900 tracking-wider mb-2">IP Pool</div>
+                                                    <div id="p-pool-deny-{{ pid }}"></div>
+                                                </div>
+                                            </div>
+                                        </div>
+    
+                                        <div class="bg-[#F8FAFC] border-t border-gray-200 p-5 px-6 flex items-start space-x-4">
+                                            <div class="p-2 bg-white rounded-full shadow-sm border border-gray-200 text-green-500 mt-1">
+                                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg>
+                                            </div>
+                                            <div>
+                                                <div class="text-[11px] font-black text-gray-900 mb-1.5 uppercase tracking-widest">Komentar / Catatan dari perangkat</div>
+                                                <div class="text-[13px] text-gray-600 font-medium leading-relaxed max-w-4xl" id="p-comment-deny-{{ pid }}"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
-      </div>
     </div>
-  </div>
+    
+    <!-- ========================================== -->
+    <!-- BAGIAN 3: RINGKASAN EKSEKUSI PER POLICY    -->
+    <!-- ========================================== -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mt-8">
+        <div class="mb-5">
+            <h3 class="text-base font-extrabold text-gray-900">Ringkasan Eksekusi & Evaluasi per Policy</h3>
+            <p class="text-[13px] text-gray-600 font-medium mt-1">Rangkuman hasil analisis rule, anomali konfigurasi, dan status operasional untuk setiap firewall policy.</p>
+        </div>
+        
+        <div class="max-h-[500px] overflow-y-auto overflow-x-auto custom-scrollbar pr-2">
+            <div class="min-w-[800px]">
+                
+                <!-- Headers Grid -->
+                <div class="grid grid-cols-12 gap-4 mb-3 px-4 text-[11px] font-extrabold text-gray-500 uppercase tracking-wider">
+                    <div class="col-span-3">Policy</div>
+                    <div class="col-span-2 text-center border-l border-r border-transparent">Status Keamanan</div>
+                    <div class="col-span-7">Ringkasan Temuan / Catatan Evaluasi</div>
+                </div>
+
+                <!-- Rows List -->
+                <div class="space-y-3">
+                    {% for risk in policy_risks %}
+                    <div class="grid grid-cols-12 gap-0 rounded-xl border items-stretch overflow-hidden
+                        {% if risk.severity == 'CRITICAL' or risk.severity == 'HIGH' %} bg-[#FEF2F2] border-red-200
+                        {% elif risk.severity == 'MEDIUM' %} bg-[#FFF7ED] border-orange-200
+                        {% elif risk.severity == 'LOW' %} bg-[#F8FAFC] border-gray-200
+                        {% elif risk.severity == 'INFO' %} bg-[#F0FDF4] border-green-200
+                        {% else %} bg-white border-gray-200 {% endif %}">
+                        
+                        <div class="col-span-3 p-4 flex flex-col justify-center border-r 
+                            {% if risk.severity == 'CRITICAL' or risk.severity == 'HIGH' %} border-red-100
+                            {% elif risk.severity == 'MEDIUM' %} border-orange-100
+                            {% elif risk.severity == 'LOW' %} border-gray-200
+                            {% elif risk.severity == 'INFO' %} border-green-200
+                            {% else %} border-gray-100 {% endif %}">
+                            
+                            <div class="text-[14px] font-extrabold 
+                                {% if risk.severity == 'CRITICAL' or risk.severity == 'HIGH' %} text-red-600
+                                {% elif risk.severity == 'MEDIUM' %} text-orange-600
+                                {% elif risk.severity == 'LOW' %} text-gray-800
+                                {% elif risk.severity == 'INFO' %} text-green-700
+                                {% else %} text-gray-700 {% endif %}">
+                                ID: {{ risk.policy_id }}
+                            </div>
+                            <div class="text-[12px] font-medium text-gray-600 mt-1 leading-snug">{{ risk.policy_name|default:"Tanpa Nama" }}</div>
+                        </div>
+
+                        <div class="col-span-2 p-4 flex items-center justify-center border-r
+                            {% if risk.severity == 'CRITICAL' or risk.severity == 'HIGH' %} border-red-100
+                            {% elif risk.severity == 'MEDIUM' %} border-orange-100
+                            {% elif risk.severity == 'LOW' %} border-gray-200
+                            {% elif risk.severity == 'INFO' %} border-green-200
+                            {% else %} border-gray-100 {% endif %}">
+                            
+                            <div class="text-[13px] font-extrabold uppercase
+                                {% if risk.severity == 'CRITICAL' or risk.severity == 'HIGH' %} text-red-600
+                                {% elif risk.severity == 'MEDIUM' %} text-orange-600
+                                {% elif risk.severity == 'LOW' %} text-gray-800
+                                {% elif risk.severity == 'INFO' %} text-green-700
+                                {% else %} text-gray-600 {% endif %}">
+                                {% if risk.severity == 'INFO' %}SAFE{% else %}{{ risk.severity }}{% endif %}
+                            </div>
+                        </div>
+
+                        <div class="col-span-7 p-4 flex flex-col justify-center">
+                            {% if risk.contributing_factors %}
+                            <ul class="list-disc list-inside text-[12px] font-medium text-gray-700 space-y-1.5">
+                                {% for factor in risk.contributing_factors %}
+                                    <li>{{ factor }}</li>
+                                {% endfor %}
+                            </ul>
+                            {% else %}
+                            <span class="text-[12px] text-gray-400 italic font-medium">Tidak ada rincian evaluasi tersedia.</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="text-center py-8 text-sm text-gray-500 font-medium">
+                        Data ringkasan eksekusi belum tersedia.
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
 </div>
-{% endblock %} {% block extra_js %}
+{% endblock %}
+
+{% block extra_js %}
 <script>
-  document.addEventListener("DOMContentLoaded", function () {
-    const counts = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0, INFO: 0 };
-    document.querySelectorAll(".finding-row").forEach((row) => {
-      const sev = row.getAttribute("data-severity");
-      if (counts[sev] !== undefined) counts[sev]++;
+    document.addEventListener("DOMContentLoaded", function() {
+        const counts = { 'CRITICAL': 0, 'HIGH': 0, 'MEDIUM': 0, 'LOW': 0, 'INFO': 0 };
+        document.querySelectorAll('.finding-row').forEach(row => {
+            const sev = row.getAttribute('data-severity');
+            if (counts[sev] !== undefined) counts[sev]++;
+        });
+        document.getElementById('count-critical').innerText = counts['CRITICAL'];
+        document.getElementById('count-high').innerText = counts['HIGH'];
+        document.getElementById('count-medium').innerText = counts['MEDIUM'];
+        document.getElementById('count-low').innerText = counts['LOW'];
+        document.getElementById('count-info').innerText = counts['INFO'];
     });
-    document.getElementById("count-critical").innerText = counts["CRITICAL"];
-    document.getElementById("count-high").innerText = counts["HIGH"];
-    document.getElementById("count-medium").innerText = counts["MEDIUM"];
-    document.getElementById("count-low").innerText = counts["LOW"];
-    document.getElementById("count-info").innerText = counts["INFO"];
-  });
 
-  let activeFindingId = null;
-  let activePolicyId = null;
+    let activeFindingId = null;
+    let activePolicyId = null; 
 
-  // Helper Fungsi untuk merapikan UI Array
-  function formatIntfAddr(intfs = [], addrs = [], type) {
-    let html = "";
-    if (intfs && intfs.length > 0) {
-      html += `<div class="mb-3"><div class="text-[10px] font-bold text-gray-400 uppercase mb-1.5">Interface</div>`;
-      html += intfs
-        .map(
-          (i) =>
-            `<div class="text-[12px] font-bold text-gray-700 bg-gray-100 px-2 py-1 rounded-md inline-block mr-1.5 mb-1.5 border border-gray-200">${i}</div>`,
-        )
-        .join("");
-      html += `</div>`;
-    }
-    if (addrs && addrs.length > 0) {
-      let colorCls =
-        type === "src"
-          ? "text-blue-700 bg-blue-50 border-blue-200"
-          : "text-red-700 bg-red-50 border-red-200";
-      html += `<div><div class="text-[10px] font-bold text-gray-400 uppercase mb-1.5">Address</div>`;
-      html += addrs
-        .map(
-          (a) =>
-            `<div class="text-[12px] font-bold ${colorCls} px-2 py-1 rounded-md inline-block mr-1.5 mb-1.5 border">${a}</div>`,
-        )
-        .join("");
-      html += `</div>`;
-    }
-    return html || `<span class="text-xs text-gray-400 italic">Kosong</span>`;
-  }
-
-  // Fungsi Utama Toggle Detail Policy
-  function toggleDetail(findingId, deviceId, policyStr, btnPrefix = "btn") {
-    const mainRow = document.getElementById("row-" + findingId);
-    const detailRow = document.getElementById("detail-" + findingId);
-    const tbody = mainRow.closest("tbody");
-    const activeBox = mainRow.querySelector(".finding-box");
-
-    // Ekstrak ID dari argumen teks yang dilempar dari tombol
-    const match = policyStr.match(/ID\s+(\d+)/);
-    if (!match) {
-      alert("Nomor ID Policy tidak terdeteksi.");
-      return;
-    }
-    const policyId = match[1];
-
-    const clickedBtnText = document.getElementById(
-      btnPrefix + "-text-" + findingId,
-    );
-    const clickedBtnIcon = document.getElementById(
-      btnPrefix + "-icon-" + findingId,
-    );
-
-    // Helper mereset text & icon tombol ke keadaan default
-    function resetButton(prefix, fid, defaultText) {
-      const t = document.getElementById(prefix + "-text-" + fid);
-      const i = document.getElementById(prefix + "-icon-" + fid);
-      if (t) t.innerText = defaultText;
-      if (i) i.style.transform = "rotate(0deg)";
+    // Helper Fungsi untuk merapikan UI Array
+    function formatIntfAddr(intfs = [], addrs = [], type) {
+        let html = '';
+        if (intfs && intfs.length > 0) {
+            html += `<div class="mb-3"><div class="text-[10px] font-bold text-gray-400 uppercase mb-1.5">Interface</div>`;
+            html += intfs.map(i => `<div class="text-[12px] font-bold text-gray-700 bg-gray-100 px-2 py-1 rounded-md inline-block mr-1.5 mb-1.5 border border-gray-200">${i}</div>`).join('');
+            html += `</div>`;
+        }
+        if (addrs && addrs.length > 0) {
+            let colorCls = type === 'src' ? 'text-blue-700 bg-blue-50 border-blue-200' : 'text-red-700 bg-red-50 border-red-200';
+            html += `<div><div class="text-[10px] font-bold text-gray-400 uppercase mb-1.5">Address</div>`;
+            html += addrs.map(a => `<div class="text-[12px] font-bold ${colorCls} px-2 py-1 rounded-md inline-block mr-1.5 mb-1.5 border">${a}</div>`).join('');
+            html += `</div>`;
+        }
+        return html || `<span class="text-xs text-gray-400 italic">Kosong</span>`;
     }
 
-    // Kondisi Tutup (Jika user klik tombol yang persis sama saat sedang terbuka)
-    if (activeFindingId === findingId && activePolicyId === policyId) {
-      detailRow.classList.remove("active-detail");
-      mainRow.classList.remove("active-row");
-      tbody.classList.remove("table-focus-mode");
-      if (activeBox) activeBox.style.borderBottomWidth = "1px";
+    // Fungsi Utama Toggle Detail Policy 
+    function toggleDetail(findingId, deviceId, policyStr, btnPrefix = 'btn') {
+        const mainRow = document.getElementById('row-' + findingId);
+        const detailRow = document.getElementById('detail-' + findingId);
+        const tbody = mainRow.closest('tbody'); 
+        const activeBox = mainRow.querySelector('.finding-box');
+        
+        // Ekstrak ID dari argumen teks yang dilempar dari tombol
+        const match = policyStr.match(/ID\s+(\d+)/);
+        if (!match) { alert('Nomor ID Policy tidak terdeteksi.'); return; }
+        const policyId = match[1];
 
-      resetButton("btn", findingId, "Lihat Detail");
-      resetButton("btn-rel", findingId, "Lihat Detail");
-      resetButton("btn-deny", findingId, "Lihat detail");
+        const clickedBtnText = document.getElementById(btnPrefix + '-text-' + findingId);
+        const clickedBtnIcon = document.getElementById(btnPrefix + '-icon-' + findingId);
 
-      activeFindingId = null;
-      activePolicyId = null;
-      return;
-    }
-
-    // Kondisi jika beralih ke Baris finding lain -> Reset UI lama
-    if (activeFindingId !== null && activeFindingId !== findingId) {
-      const oldDetail = document.getElementById("detail-" + activeFindingId);
-      const oldMain = document.getElementById("row-" + activeFindingId);
-      if (oldDetail) oldDetail.classList.remove("active-detail");
-      if (oldMain) {
-        oldMain.classList.remove("active-row");
-        const oldTbody = oldMain.closest("tbody");
-        if (oldTbody) oldTbody.classList.remove("table-focus-mode");
-        const oldBox = oldMain.querySelector(".finding-box");
-        if (oldBox) oldBox.style.borderBottomWidth = "1px";
-        resetButton("btn", activeFindingId, "Lihat Detail");
-        resetButton("btn-rel", activeFindingId, "Lihat Detail");
-        resetButton("btn-deny", activeFindingId, "Lihat detail");
-      }
-    }
-
-    // Aktifkan State Baru
-    activeFindingId = findingId;
-    activePolicyId = policyId;
-    tbody.classList.add("table-focus-mode");
-    mainRow.classList.add("active-row");
-    detailRow.classList.add("active-detail");
-    if (activeBox) activeBox.style.borderBottomWidth = "0px";
-
-    // Update tombol yang sedang diklik menjadi "Lihat Ringkas"
-    if (clickedBtnText) clickedBtnText.innerText = "Lihat Ringkas";
-    if (clickedBtnIcon) clickedBtnIcon.style.transform = "rotate(180deg)";
-
-    // Reset tombol lawannya untuk tabel utama (Rel vs Main Btn)
-    if (btnPrefix === "btn") {
-      resetButton("btn-rel", findingId, "Lihat Detail");
-    } else if (btnPrefix === "btn-rel") {
-      resetButton("btn", findingId, "Lihat Detail");
-    }
-
-    document.getElementById("title-" + findingId).innerText =
-      `Detail ${policyStr}`;
-
-    document.getElementById("loader-" + findingId).classList.remove("hidden");
-    document.getElementById("content-" + findingId).classList.add("hidden");
-
-    // Kosongkan sementara teks saat loading transisi
-    document.getElementById("p-id-name-" + findingId).innerText = "-";
-
-    // Fetch API (DIPERBAIKI DENGAN /compliance/)
-    fetch(`/compliance/api/device/${deviceId}/policy/${policyId}/`)
-      .then((res) => res.json())
-      .then((data) => {
-        document.getElementById("loader-" + findingId).classList.add("hidden");
-        document
-          .getElementById("content-" + findingId)
-          .classList.remove("hidden");
-
-        if (data.error) {
-          document.getElementById("p-comment-" + findingId).innerHTML =
-            `<span class="text-red-500 font-bold">${data.error}</span>`;
-          return;
+        // Helper mereset text & icon tombol ke keadaan default
+        function resetButton(prefix, fid, defaultText) {
+            const t = document.getElementById(prefix + '-text-' + fid);
+            const i = document.getElementById(prefix + '-icon-' + fid);
+            if (t) t.innerText = defaultText;
+            if (i) i.style.transform = "rotate(0deg)";
         }
 
-        // Injeksi Data Col 1
-        document.getElementById("p-id-name-" + findingId).innerText =
-          `${data.id || "-"} - ${data.name || "-"}`;
+        // Kondisi Tutup (Jika user klik tombol yang persis sama saat sedang terbuka)
+        if (activeFindingId === findingId && activePolicyId === policyId) {
+            detailRow.classList.remove('active-detail');
+            mainRow.classList.remove('active-row');
+            tbody.classList.remove('table-focus-mode');
+            if(activeBox) activeBox.style.borderBottomWidth = "1px";
+            
+            resetButton('btn', findingId, "Lihat Detail");
+            resetButton('btn-rel', findingId, "Lihat Detail");
+            resetButton('btn-deny', findingId, "Lihat detail");
+            
+            activeFindingId = null;
+            activePolicyId = null;
+            return;
+        }
 
-        const st = document.getElementById("p-status-" + findingId);
-        let statusVal = data.status || "-";
-        st.innerText = statusVal;
-        st.className =
-          statusVal === "Enabled" || statusVal === "enable"
-            ? "px-2.5 py-1 rounded-md text-[11px] font-bold border border-green-200 text-green-700 bg-green-50"
-            : "px-2.5 py-1 rounded-md text-[11px] font-bold border border-red-200 text-red-600 bg-red-50";
+        // Kondisi jika beralih ke Baris finding lain -> Reset UI lama
+        if (activeFindingId !== null && activeFindingId !== findingId) {
+            const oldDetail = document.getElementById('detail-' + activeFindingId);
+            const oldMain = document.getElementById('row-' + activeFindingId);
+            if (oldDetail) oldDetail.classList.remove('active-detail');
+            if (oldMain) {
+                oldMain.classList.remove('active-row');
+                const oldTbody = oldMain.closest('tbody');
+                if (oldTbody) oldTbody.classList.remove('table-focus-mode');
+                const oldBox = oldMain.querySelector('.finding-box');
+                if (oldBox) oldBox.style.borderBottomWidth = "1px";
+                resetButton('btn', activeFindingId, "Lihat Detail");
+                resetButton('btn-rel', activeFindingId, "Lihat Detail");
+                resetButton('btn-deny', activeFindingId, "Lihat detail");
+            }
+        }
 
-        const ac = document.getElementById("p-action-" + findingId);
-        let actionVal = (data.action || "").toUpperCase();
-        ac.innerText = actionVal || "-";
-        ac.className =
-          actionVal === "ACCEPT"
-            ? "text-green-600 font-black text-sm"
-            : "text-red-600 font-black text-sm";
+        // Aktifkan State Baru
+        activeFindingId = findingId;
+        activePolicyId = policyId;
+        tbody.classList.add('table-focus-mode');
+        mainRow.classList.add('active-row');
+        detailRow.classList.add('active-detail');
+        if(activeBox) activeBox.style.borderBottomWidth = "0px";
+        
+        // Update tombol yang sedang diklik menjadi "Lihat Ringkas"
+        if (clickedBtnText) clickedBtnText.innerText = "Lihat Ringkas";
+        if (clickedBtnIcon) clickedBtnIcon.style.transform = "rotate(180deg)";
+        
+        // Reset tombol lawannya untuk tabel utama (Rel vs Main Btn)
+        if (btnPrefix === 'btn') {
+            resetButton('btn-rel', findingId, "Lihat Detail");
+        } else if (btnPrefix === 'btn-rel') {
+            resetButton('btn', findingId, "Lihat Detail");
+        }
+        
+        document.getElementById('title-' + findingId).innerText = `Detail ${policyStr}`;
 
-        document.getElementById("p-nat-" + findingId).innerText =
-          data.nat || "disable";
+        document.getElementById('loader-' + findingId).classList.remove('hidden');
+        document.getElementById('content-' + findingId).classList.add('hidden');
+        
+        // Kosongkan sementara teks saat loading transisi
+        document.getElementById('p-id-name-' + findingId).innerText = '-';
 
-        let logVal = data.logtraffic || "disable";
-        document.getElementById("p-log-" + findingId).innerHTML =
-          `<span class="px-2.5 py-1 rounded-md text-[11px] font-bold border border-gray-200 text-gray-700 bg-gray-50">${logVal}</span>`;
+        // Fetch API (DIPERBAIKI DENGAN /compliance/)
+        fetch(`/compliance/api/device/${deviceId}/policy/${policyId}/`)
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('loader-' + findingId).classList.add('hidden');
+                document.getElementById('content-' + findingId).classList.remove('hidden');
 
-        // Injeksi Col 2 & 3
-        const srcIntf = Array.isArray(data.srcintf) ? data.srcintf : [];
-        const srcAddr = Array.isArray(data.srcaddr) ? data.srcaddr : [];
-        const dstIntf = Array.isArray(data.dstintf) ? data.dstintf : [];
-        const dstAddr = Array.isArray(data.dstaddr) ? data.dstaddr : [];
+                if (data.error) {
+                    document.getElementById('p-comment-' + findingId).innerHTML = `<span class="text-red-500 font-bold">${data.error}</span>`;
+                    return;
+                }
+                
+                // Injeksi Data Col 1
+                document.getElementById('p-id-name-' + findingId).innerText = `${data.id || '-'} - ${data.name || '-'}`;
+                
+                const st = document.getElementById('p-status-' + findingId);
+                let statusVal = data.status || '-';
+                st.innerText = statusVal;
+                st.className = (statusVal === 'Enabled' || statusVal === 'enable') ? 'px-2.5 py-1 rounded-md text-[11px] font-bold border border-green-200 text-green-700 bg-green-50' : 'px-2.5 py-1 rounded-md text-[11px] font-bold border border-red-200 text-red-600 bg-red-50';
+                
+                const ac = document.getElementById('p-action-' + findingId);
+                let actionVal = (data.action || '').toUpperCase();
+                ac.innerText = actionVal || '-';
+                ac.className = actionVal === 'ACCEPT' ? 'text-green-600 font-black text-sm' : 'text-red-600 font-black text-sm';
+                
+                document.getElementById('p-nat-' + findingId).innerText = data.nat || 'disable';
+                
+                let logVal = data.logtraffic || 'disable';
+                document.getElementById('p-log-' + findingId).innerHTML = `<span class="px-2.5 py-1 rounded-md text-[11px] font-bold border border-gray-200 text-gray-700 bg-gray-50">${logVal}</span>`;
 
-        document.getElementById("p-src-" + findingId).innerHTML =
-          formatIntfAddr(srcIntf, srcAddr, "src");
-        document.getElementById("p-dst-" + findingId).innerHTML =
-          formatIntfAddr(dstIntf, dstAddr, "dst");
+                // Injeksi Col 2 & 3
+                const srcIntf = Array.isArray(data.srcintf) ? data.srcintf : [];
+                const srcAddr = Array.isArray(data.srcaddr) ? data.srcaddr : [];
+                const dstIntf = Array.isArray(data.dstintf) ? data.dstintf : [];
+                const dstAddr = Array.isArray(data.dstaddr) ? data.dstaddr : [];
+                
+                document.getElementById('p-src-' + findingId).innerHTML = formatIntfAddr(srcIntf, srcAddr, 'src');
+                document.getElementById('p-dst-' + findingId).innerHTML = formatIntfAddr(dstIntf, dstAddr, 'dst');
+                
+                // Injeksi Col 4
+                const svc = Array.isArray(data.service) ? data.service : [];
+                document.getElementById('p-svc-' + findingId).innerHTML = svc.length ? svc.map(s => `<div class="text-[12px] font-bold text-purple-700 bg-purple-50 px-2 py-1 rounded-md inline-block mr-1.5 mb-1.5 border border-purple-200">${s}</div>`).join('') : '<span class="text-xs text-gray-400 italic">Any</span>';
+                document.getElementById('p-sch-' + findingId).innerText = data.schedule || 'always';
 
-        // Injeksi Col 4
-        const svc = Array.isArray(data.service) ? data.service : [];
-        document.getElementById("p-svc-" + findingId).innerHTML = svc.length
-          ? svc
-              .map(
-                (s) =>
-                  `<div class="text-[12px] font-bold text-purple-700 bg-purple-50 px-2 py-1 rounded-md inline-block mr-1.5 mb-1.5 border border-purple-200">${s}</div>`,
-              )
-              .join("")
-          : '<span class="text-xs text-gray-400 italic">Any</span>';
-        document.getElementById("p-sch-" + findingId).innerText =
-          data.schedule || "always";
+                // Injeksi Col 5 (Security)
+                let secHtml = '';
+                const sp = data.security_profiles || {}; 
+                const secs = [
+                    { k: 'Antivirus', v: sp['Antivirus'], c: 'text-red-700 bg-red-50 border-red-200' },
+                    { k: 'Web Filter', v: sp['Web Filter'], c: 'text-green-700 bg-green-50 border-green-200' },
+                    { k: 'IPS Sensor', v: sp['IPS Sensor'], c: 'text-orange-700 bg-orange-50 border-orange-200' },
+                    { k: 'App Control', v: sp['App Control'], c: 'text-blue-700 bg-blue-50 border-blue-200' }
+                ];
+                secs.forEach(s => {
+                    if(s.v) secHtml += `<div class="flex items-center justify-between py-1 border-b border-gray-100 last:border-0"><span class="text-[11px] font-bold text-gray-500">${s.k}</span><span class="text-[11px] font-black px-2 py-0.5 rounded border ${s.c}">${s.v}</span></div>`;
+                });
+                document.getElementById('p-sec-' + findingId).innerHTML = secHtml || '<span class="text-[12px] text-gray-400 italic font-medium">Profile Tidak Aktif</span>';
 
-        // Injeksi Col 5 (Security)
-        let secHtml = "";
-        const sp = data.security_profiles || {};
-        const secs = [
-          {
-            k: "Antivirus",
-            v: sp["Antivirus"],
-            c: "text-red-700 bg-red-50 border-red-200",
-          },
-          {
-            k: "Web Filter",
-            v: sp["Web Filter"],
-            c: "text-green-700 bg-green-50 border-green-200",
-          },
-          {
-            k: "IPS Sensor",
-            v: sp["IPS Sensor"],
-            c: "text-orange-700 bg-orange-50 border-orange-200",
-          },
-          {
-            k: "App Control",
-            v: sp["App Control"],
-            c: "text-blue-700 bg-blue-50 border-blue-200",
-          },
-        ];
-        secs.forEach((s) => {
-          if (s.v)
-            secHtml += `<div class="flex items-center justify-between py-1 border-b border-gray-100 last:border-0"><span class="text-[11px] font-bold text-gray-500">${s.k}</span><span class="text-[11px] font-black px-2 py-0.5 rounded border ${s.c}">${s.v}</span></div>`;
-        });
-        document.getElementById("p-sec-" + findingId).innerHTML =
-          secHtml ||
-          '<span class="text-[12px] text-gray-400 italic font-medium">Profile Tidak Aktif</span>';
+                // Injeksi Pool
+                const pool = Array.isArray(data.poolname) ? data.poolname : [];
+                document.getElementById('p-pool-' + findingId).innerHTML = pool.length ? pool.map(p => `<div class="text-[12px] font-bold text-gray-800 bg-white px-2 py-1 rounded border border-gray-300 inline-block mr-1">${p}</div>`).join('') : '<span class="text-[12px] text-gray-400 italic font-medium">Tidak ada IP Pool</span>';
 
-        // Injeksi Pool
-        const pool = Array.isArray(data.poolname) ? data.poolname : [];
-        document.getElementById("p-pool-" + findingId).innerHTML = pool.length
-          ? pool
-              .map(
-                (p) =>
-                  `<div class="text-[12px] font-bold text-gray-800 bg-white px-2 py-1 rounded border border-gray-300 inline-block mr-1">${p}</div>`,
-              )
-              .join("")
-          : '<span class="text-[12px] text-gray-400 italic font-medium">Tidak ada IP Pool</span>';
+                // Injeksi Komentar
+                document.getElementById('p-comment-' + findingId).innerText = data.comments || 'Tidak ada catatan atau komentar tambahan pada policy ini.';
+            })
+            .catch(err => {
+                console.error("Terjadi kesalahan saat parsing/menampilkan detail:", err);
+                document.getElementById('loader-' + findingId).classList.add('hidden');
+                document.getElementById('content-' + findingId).classList.remove('hidden');
+                document.getElementById('p-comment-' + findingId).innerHTML = '<span class="text-red-500 font-bold">Gagal mengambil atau memproses data dari API. Silakan coba lagi.</span>';
+            });
+    }
 
-        // Injeksi Komentar
-        document.getElementById("p-comment-" + findingId).innerText =
-          data.comments ||
-          "Tidak ada catatan atau komentar tambahan pada policy ini.";
-      })
-      .catch((err) => {
-        console.error(
-          "Terjadi kesalahan saat parsing/menampilkan detail:",
-          err,
-        );
-        document.getElementById("loader-" + findingId).classList.add("hidden");
-        document
-          .getElementById("content-" + findingId)
-          .classList.remove("hidden");
-        document.getElementById("p-comment-" + findingId).innerHTML =
-          '<span class="text-red-500 font-bold">Gagal mengambil atau memproses data dari API. Silakan coba lagi.</span>';
-      });
-  }
-
-  window.addEventListener("pagehide", function () {
-    var urlHapus = "{% url 'compliance:hapus_scan_otomatis' %}";
-    var formData = new FormData();
-    formData.append("scan_id", "{{ scan.id }}");
-    navigator.sendBeacon(urlHapus, formData);
-  });
+    window.addEventListener('pagehide', function() {
+        var urlHapus = "{% url 'compliance:hapus_scan_otomatis' %}";
+        var formData = new FormData();
+        formData.append('scan_id', '{{ scan.id }}');
+        navigator.sendBeacon(urlHapus, formData);
+    });
 </script>
 {% endblock %}

@@ -1,4 +1,3 @@
-# compliance/urls.py
 from django.urls import path
 from . import views
 
@@ -11,7 +10,6 @@ urlpatterns = [
     path('rules/create/', views.RuleCreateView.as_view(), name='rule_create'),
     path('rules/<int:pk>/update/', views.RuleUpdateView.as_view(), name='rule_update'),
     
-    # Rute Notifikasi Baru (berdasarkan ID Notifikasi)
     path('hapus-scan-otomatis//', views.hapus_hasil_scan_otomatis, name='hapus_scan_otomatis'),
     path('api/device/<int:device_id>/policy/<int:policy_id>/', views.PolicyDetailAPI.as_view(), name='api_policy_detail'),
     

@@ -1,4 +1,3 @@
-# devices/models.py
 from django.db import models
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
@@ -42,8 +41,7 @@ class Device(models.Model):
         from core.utils import encrypt_token
         
         raw_token = getattr(self, 'api_token', getattr(self, 'token', ''))
-        
-        # Selalu enkripsi jika ada nilai token baru yang dimasukkan
+
         if raw_token:
             encrypted = encrypt_token(str(raw_token))
             final_token = encrypted.decode('utf-8') if isinstance(encrypted, bytes) else encrypted
@@ -72,7 +70,6 @@ class Device(models.Model):
             decrypted = decrypt_token(db_token)
             return decrypted.decode('utf-8') if isinstance(decrypted, bytes) else decrypted
         except Exception:
-            # WAJIB Fail-Closed: Cegah kebocoran data mentah saat dekripsi gagal
             return ""
         
     def clean(self):
@@ -82,10 +79,6 @@ class Device(models.Model):
 
 
 class DeviceStatistic(models.Model):
-    """
-    Menyimpan metrik pemantauan ringan dari perangkat FortiGate.
-    Diperbarui setiap kali user menekan tombol Sync.
-    """
     device = models.OneToOneField(Device, on_delete=models.CASCADE, related_name='statistics')
     total_interfaces_up = models.IntegerField(default=0)
     total_policies = models.IntegerField(default=0)

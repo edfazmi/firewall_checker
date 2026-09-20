@@ -1,4 +1,3 @@
-# devices/views.py
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView
 from django.views import View
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -51,10 +50,8 @@ class SyncDeviceView(LoginRequiredMixin, View):
         service = FortiGateAPIService(device=device, user=request.user)
         
         try:
-            # 1. Test Koneksi
             service.test_connection()
-            
-            # 2. Ambil Statistik Monitoring
+
             stats = service.fetch_statistics()
             if stats:
                 stat_obj, created = DeviceStatistic.objects.get_or_create(device=device)

@@ -1,4 +1,3 @@
-# devices/services.py
 import requests
 import urllib3
 from typing import Dict, Any, Optional
@@ -25,7 +24,6 @@ class FortiGateAPIService(BaseService):
         self.timeout = 10 
 
     def _make_request(self, endpoint: str, is_monitor: bool = False) -> Any:
-        """HTTP Wrapper murni. Sama sekali tidak mengubah database (No Side-Effects)."""
         url_prefix = self.monitor_url if is_monitor else self.base_url
         url = f"{url_prefix}/{endpoint}"
         
@@ -70,7 +68,6 @@ class FortiGateAPIService(BaseService):
         )
 
     def test_connection(self) -> bool:
-        """Satu-satunya fungsi yang berhak mengubah status device menjadi ERROR/CONNECTED secara paksa."""
         try:
             url = f"{self.monitor_url}/system/status"
             response = requests.get(url, headers=self.headers, verify=False, timeout=self.timeout)
@@ -133,7 +130,6 @@ class FortiGateAPIService(BaseService):
             pass
         return "Sistem / Admin GUI"
 
-    # --- Data Fetching Methods (DENGAN PEREDAM ERROR AGAR AUDIT TIDAK GAGAL) ---
     def get_firewall_policies(self) -> list:
         try:
             res = self._make_request('firewall/policy')
@@ -169,7 +165,7 @@ class FortiGateAPIService(BaseService):
             res = self._make_request('system/admin')
             return res if isinstance(res, list) else [res] if res else []
         except: 
-            return [] # Melindungi dari 500 Error
+            return [] 
 
     def get_policy_monitor(self) -> list:
         try:
