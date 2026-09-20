@@ -23,5 +23,10 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         months_id = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
         now = timezone.now()
         context['current_month_year'] = f"{months_id[now.month]} {now.year}"
+
+        from compliance.models import ComplianceRule
+
+        context['total_active_rules'] = ComplianceRule.objects.filter(is_active=True).count()
+        context['total_inactive_rules'] = ComplianceRule.objects.filter(is_active=False).count()
         
         return context

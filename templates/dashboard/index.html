@@ -29,46 +29,65 @@
         {{ current_month_year }}
     </div>
 
-    <!-- Tiga Kartu Statistik -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div class="bg-[#F8F9FA] rounded-2xl p-6 border border-gray-200 shadow-sm flex flex-col justify-center h-40 transition-transform hover:scale-[1.02]">
-            <div class="flex items-center space-x-4 mb-2">
-                <div class="bg-blue-100 p-3 rounded-xl text-blue-600">
-                    <svg class="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M4 9h4v11H4zM10 4h4v16h-4zM16 13h4v7h-4z"></path>
-                    </svg>
-                </div>
-                <div class="text-4xl font-extrabold text-blue-600">{{ total_devices }}</div>
+    <!-- Dua Kartu Statistik -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        
+        <!-- KARTU 1: Total Device Terdaftar -->
+        <div class="bg-[#F4F7FC] rounded-2xl p-7 border border-[#E2E8F0] shadow-sm flex items-center space-x-6 h-44 transition-transform hover:scale-[1.01]">
+            <div class="flex-shrink-0 bg-[#E2EAF6] rounded-full flex items-center justify-center w-[84px] h-[84px]">
+                <svg class="w-10 h-10 text-[#0C4594]" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M4 14h4v7H4zm6-5h4v12h-4zm6-6h4v18h-4z"></path>
+                </svg>
             </div>
-            <div class="text-sm font-semibold text-gray-700 ml-16 mt-1">Total Device Terdaftar</div>
-            <div class="text-xs text-gray-500 ml-16 mt-1">Perangkat yang aktif</div>
+            
+            <div class="flex-1 h-full flex flex-col justify-center">
+                <!-- Baris 1: Judul -->
+                <div class="h-6 flex items-end">
+                    <span class="text-[14px] font-bold text-gray-900">Total Device Terdaftar</span>
+                </div>
+                
+                <!-- Baris 2: Angka Utama -->
+                <div class="mt-2 h-12 flex items-center">
+                    <span class="text-[46px] font-black text-[#0C4594] leading-none inline-block border-b-[4px] border-[#0092FF] pb-1">
+                        {{ total_devices|default:"0" }}
+                    </span>
+                </div>
+                
+                <!-- Baris 3: Sub-label -->
+                <div class="mt-3 h-5 flex items-start">
+                    <span class="text-[12.5px] font-bold text-gray-800">Perangkat Forti yang aktif</span>
+                </div>
+            </div>
         </div>
 
-        <div class="bg-[#F6FAF7] rounded-2xl p-6 border border-gray-200 shadow-sm flex flex-col justify-center h-40 transition-transform hover:scale-[1.02]">
-            <div class="flex items-center space-x-4 mb-2">
-                <div class="bg-green-100 p-3 rounded-xl text-green-600">
-                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
-                    </svg>
-                </div>
-                <div class="text-4xl font-extrabold text-green-600">{{ total_online }}</div>
+        <!-- KARTU 2: Jumlah Rule Compliance (Sejajar Tengah dengan Ikon) -->
+        <div class="bg-[#F4FAF4] rounded-2xl p-7 border border-[#E0EFE0] shadow-sm flex items-center space-x-6 h-44 transition-transform hover:scale-[1.01]">
+            <div class="flex-shrink-0 bg-[#E0EFE0] rounded-full flex items-center justify-center w-[84px] h-[84px]">
+                <svg class="w-[42px] h-[42px] text-[#1A7B44]" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                </svg>
             </div>
-            <div class="text-sm font-semibold text-gray-700 ml-16 mt-1">Total Device Online</div>
-            <div class="text-xs text-gray-500 ml-16 mt-1">Terkoneksi ke sistem pusat</div>
+            
+            <div class="flex-1 h-full flex items-center w-full">
+                <!-- Section Rule Aktif -->
+                <div class="flex-1 flex flex-col pr-2">
+                    <div class="text-[13px] font-bold text-[#1A7B44] leading-tight mb-2">Rule Aktif</div>
+                    <div class="text-[46px] font-black text-[#1A7B44] leading-none">{{ total_active_rules|default:"0" }}</div>
+                    <div class="text-[11.5px] font-semibold text-gray-800 mt-2 whitespace-nowrap">Aturan yang sedang aktif</div>
+                </div>
+                
+                <!-- Vertical Divider (Presisi di tengah) -->
+                <div class="w-px h-20 bg-gray-300 mx-2"></div>
+                
+                <!-- Section Rule Nonaktif -->
+                <div class="flex-1 flex flex-col pl-4">
+                    <div class="text-[13px] font-bold text-[#374151] leading-tight mb-2">Rule Nonaktif</div>
+                    <div class="text-[46px] font-black text-[#4B5563] leading-none">{{ total_inactive_rules|default:"0" }}</div>
+                    <div class="text-[11.5px] font-semibold text-gray-800 mt-2 whitespace-nowrap">Aturan yang tidak aktif</div>
+                </div>
+            </div>
         </div>
 
-        <div class="bg-[#FFF8F3] rounded-2xl p-6 border border-gray-200 shadow-sm flex flex-col justify-center h-40 transition-transform hover:scale-[1.02]">
-            <div class="flex items-center space-x-4 mb-2">
-                <div class="bg-orange-100 p-3 rounded-xl text-orange-500">
-                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                    </svg>
-                </div>
-                <div class="text-4xl font-extrabold text-orange-500">{{ total_offline }}</div>
-            </div>
-            <div class="text-sm font-semibold text-gray-700 ml-16 mt-1">Total Device Offline</div>
-            <div class="text-xs text-gray-500 ml-16 mt-1">Gagal terhubung / Timeout</div>
-        </div>
     </div>
 
     <!-- Tabel Daftar Forti -->
