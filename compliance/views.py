@@ -1,11 +1,15 @@
-# compliance/views.py
-from django.views import View
-from django.views.generic import DetailView, ListView, CreateView, UpdateView
-from django.shortcuts import get_object_or_404, redirect
+import requests
+from urllib3.exceptions import InsecureRequestWarning
+
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.urls import reverse_lazy
 from django.db.models import Case, When, Value, IntegerField
+from django.http import Http404, HttpResponse, JsonResponse
+from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse_lazy
+from django.views import View
+from django.views.decorators.csrf import csrf_exempt
+from django.views.generic import CreateView, DetailView, ListView, UpdateView
 
 from devices.models import Device
 from core.exceptions import BaseAppException
@@ -13,20 +17,9 @@ from .models import ScanHistory, ComplianceRule
 from .services import ComplianceScanner
 from .forms import ComplianceRuleForm
 
-from django.http import HttpResponse, JsonResponse
-from django.views.decorators.csrf import csrf_exempt
-from compliance.models import ScanHistory
-
-from django.http import HttpResponse, Http404
-from django.shortcuts import get_object_or_404, redirect, render
-
-import requests
-from urllib3.exceptions import InsecureRequestWarning
-requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
-
-
-
-# --- SCANNER VIEWS ---
+requests.packages.urllib3.disable_warnings(
+    category=InsecureRequestWarning
+)
 
 class ScanDeviceView(LoginRequiredMixin, View):
     def get(self, request, device_id):
@@ -54,10 +47,8 @@ class ScanResultView(LoginRequiredMixin, DetailView):
 
     def get(self, request, *args, **kwargs):
         try:
-            # Mencoba memuat objek ScanHistory
             self.object = self.get_object()
         except Http404:
-            # Jika data tidak ditemukan (karena terhapus otomatis), arahkan ke halaman khusus
             return render(request, 'compliance/scan_deleted.html', status=404)
 
         context = self.get_context_data(object=self.object)
@@ -65,11 +56,9 @@ class ScanResultView(LoginRequiredMixin, DetailView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        
-        # Ambil temuan (findings)
+
         context['findings'] = self.object.findings.select_related('rule').all().order_by('rule__severity')
         
-        # Ambil hasil penilaian risiko dengan kustom urutan severity
         context['policy_risks'] = (
             self.object.policy_risks.all()
             .annotate(
@@ -86,9 +75,6 @@ class ScanResultView(LoginRequiredMixin, DetailView):
         )
         
         return context
-
-
-# --- RULE MANAGEMENT VIEWS ---
 
 class RuleListView(LoginRequiredMixin, ListView):
     model = ComplianceRule
@@ -130,15 +116,13 @@ class PolicyDetailAPI(LoginRequiredMixin, View):
             
             url = f"https://{device.ip_address}/api/v2/cmdb/firewall/policy/{policy_id}"
             headers = {'Authorization': f'Bearer {token}'}
-            
-            # Tembak API FortiGate
+
             response = requests.get(url, headers=headers, verify=False, timeout=10)
             
             if response.status_code == 200:
                 data = response.json().get('results', [])
                 if data:
                     p = data[0]
-                    # Format ulang data agar mudah dibaca oleh Javascript Frontend
                     result = {
                         'id': p.get('policyid'),
                         'name': p.get('name', 'Tanpa Nama'),
@@ -173,7 +157,6 @@ class PolicyDetailAPI(LoginRequiredMixin, View):
 @csrf_exempt
 def hapus_hasil_scan_otomatis(request):
     if request.method == 'POST':
-        # Menarik ID dari payload Form, bukan dari URL
         scan_id = request.POST.get('scan_id')
         if scan_id:
             ScanHistory.objects.filter(id=scan_id).delete()

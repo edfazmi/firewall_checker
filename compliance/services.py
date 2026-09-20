@@ -1,4 +1,3 @@
-# compliance/services.py
 import ipaddress
 from typing import List, Dict, Any
 from django.utils import timezone
@@ -191,19 +190,16 @@ class ComplianceScanner(BaseService):
         for intf in interfaces:
             intf_name = intf.get('name', 'Unknown')
             status = intf.get('status', 'down')
-            
-            # Execute rules
+
             self._rule_intf_down(intf, intf_name, status)
             self._rule_intf_no_ip(intf, intf_name, status)
 
     def _check_administrators(self, admins: List[Dict[str, Any]]):
         for admin in admins:
             admin_name = admin.get('name', 'Unknown')
-            # Execute rules
             self._rule_adm_no_trusthost(admin, admin_name)
 
     def _check_routing(self, routes: List[Dict[str, Any]]):
-        # Execute rules
         self._rule_route_no_default(routes)
 
     def _check_address_objects(self, addresses: List[Dict[str, Any]]):
@@ -212,26 +208,22 @@ class ComplianceScanner(BaseService):
             subnet = addr.get('subnet', '')
             addr_name = addr.get('name', '')
             if addr.get('type', '') == 'ipmask' and subnet != '0.0.0.0 0.0.0.0':
-                # Execute rules
                 self._rule_addr_dup_subnet(addr, addr_name, subnet, subnets_seen)
 
     def _check_service_objects(self, services: List[Dict[str, Any]]):
         for svc in services:
             svc_name = svc.get('name', '')
-            # Execute rules
             self._rule_svc_wide_port(svc, svc_name)
 
     def _check_unused_policies(self, policies: List[Dict[str, Any]], policy_hits: List[Dict[str, Any]]):
         hit_dict = {str(p.get('policyid')): p for p in policy_hits}
         for pol in policies:
             pol_id = str(pol.get('policyid', 'Unknown'))
-            # Execute rules
             self._rule_pol_unused(pol, pol_id, hit_dict)
 
     def _check_policies_and_relationships(self, policies: List[Dict[str, Any]]) -> List[Dict]:
         parsed_policies = []
-        
-        # 1. Parsing & Check Single-Policy Rules
+
         for pol in policies:
             pol_id = str(pol.get('policyid', 'Unknown'))
             pol_name = pol.get('name', '')
@@ -247,7 +239,6 @@ class ComplianceScanner(BaseService):
 
             target_name = f"Policy ID {pol_id} ({pol_name})"
 
-            # Execute single-policy rules
             self._rule_pol_no_desc(pol, target_name)
             self._rule_pol_overly_permissive(action, src_addrs_str, dst_addrs_str, target_name)
             self._rule_pol_any_intf(action, src_intf, dst_intf, target_name)
@@ -262,7 +253,6 @@ class ComplianceScanner(BaseService):
                 'src_nets': src_nets, 'dst_nets': dst_nets, 'raw': pol
             })
 
-        # 2. Check Multi-Policy (Relationship) Rules
         for i, pol_a in enumerate(parsed_policies):
             for j, pol_b in enumerate(parsed_policies):
                 if i >= j: continue 
@@ -283,7 +273,6 @@ class ComplianceScanner(BaseService):
                 
                 info_json = {"reason": f"Policy A ({pol_a['id']}) ditempatkan sebelum Policy B ({pol_b['id']})."}
 
-                # Execute multi-policy relationship rules
                 self._rule_pol_duplicate(pol_a, pol_b, action_a, action_b, combined_rel, target_b_name, dict(info_json))
                 self._rule_pol_shadowed(pol_a, pol_b, action_a, action_b, combined_rel, target_b_name, dict(info_json))
                 self._rule_pol_redundant(pol_a, pol_b, action_a, action_b, combined_rel, target_a_name, target_b_name, dict(info_json))
