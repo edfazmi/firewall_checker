@@ -1,7 +1,6 @@
 # core/services.py
 import logging
 from typing import Any, Dict, Optional
-from django.core.exceptions import ValidationError
 
 logger = logging.getLogger('application')
 
