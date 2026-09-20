@@ -13,4 +13,6 @@ urlpatterns = [
     
     # Rute Notifikasi Baru (berdasarkan ID Notifikasi)
     path('hapus-scan-otomatis//', views.hapus_hasil_scan_otomatis, name='hapus_scan_otomatis'),
+    path('api/device/<int:device_id>/policy/<int:policy_id>/', views.PolicyDetailAPI.as_view(), name='api_policy_detail'),
+    
 ]

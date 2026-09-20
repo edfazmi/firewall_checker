@@ -605,7 +605,7 @@
         document.getElementById('p-id-name-' + findingId).innerText = '-';
 
         // Fetch API
-        fetch(`/api/device/${deviceId}/policy/${policyId}/`)
+        fetch(`/compliance/api/device/${deviceId}/policy/${policyId}/`)
             .then(res => res.json())
             .then(data => {
                 document.getElementById('loader-' + findingId).classList.add('hidden');
