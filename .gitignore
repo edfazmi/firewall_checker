@@ -1,28 +1,21 @@
-# Environment variables (Wajib)
 .env
 
-# SQLite database (Jika Anda sedang melakukan testing lokal)
 db.sqlite3
 
-# Media files (Folder untuk file yang diunggah oleh pengguna aplikasi)
 media/
 /media
 
-# Folder Virtual Environment (Ubah sesuai nama folder env Anda)
 venv/
 env/
 
 reports/
 /reports
 
-# Environment variables (Sangat Rahasia)
 .env
 
-# Application logs (Dihasilkan oleh sistem, tidak perlu dilacak)
 application.log
 *.log
 
-# Python & Django caches
 __pycache__/
 *.py[cod]
 *$py.class
