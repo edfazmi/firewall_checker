@@ -89,7 +89,6 @@ class DeviceStatistic(models.Model):
     device = models.OneToOneField(Device, on_delete=models.CASCADE, related_name='statistics')
     total_interfaces_up = models.IntegerField(default=0)
     total_policies = models.IntegerField(default=0)
-    top_used_policy = models.CharField(max_length=255, blank=True, null=True, help_text="Policy dengan hit tertinggi")
     never_used_policies_count = models.IntegerField(default=0, help_text="Jumlah policy dengan 0 hit")
     last_updated = models.DateTimeField(auto_now=True)
 

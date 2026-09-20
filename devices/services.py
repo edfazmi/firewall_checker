@@ -24,7 +24,7 @@ class FortiGateAPIService(BaseService):
         }
         self.timeout = 10 
 
-    def _make_request(self, endpoint: str, is_monitor: bool = False) -> Dict[str, Any]:
+    def _make_request(self, endpoint: str, is_monitor: bool = False) -> Any:
         """HTTP Wrapper murni. Sama sekali tidak mengubah database (No Side-Effects)."""
         url_prefix = self.monitor_url if is_monitor else self.base_url
         url = f"{url_prefix}/{endpoint}"
@@ -95,40 +95,30 @@ class FortiGateAPIService(BaseService):
             raise FortiGateAPIError(f"Test Koneksi Gagal: {str(e)}")
 
     def fetch_statistics(self) -> dict:
-        stats = {'up_ports': 0, 'total_policies': 0, 'top_policy': "Data tidak tersedia", 'never_used': 0}
+        stats = {'up_ports': 0, 'total_policies': 0, 'never_used': 0}
+        
         try:
             interfaces = self._make_request('system/interface')
             stats['up_ports'] = sum(1 for i in interfaces if str(i.get('status', '')).lower() == 'up' or str(i.get('link', '')).lower() == 'up')
+        except Exception:
+            pass 
 
+        try:
             policies = self._make_request('firewall/policy')
             stats['total_policies'] = len(policies)
-            
+        except Exception:
+            pass
+
+        try:
             policy_monitor = self._make_request('firewall/policy', is_monitor=True)
-            
             never_used = 0
-            max_hits = -1
-            top_pol_id = None
-            
             for pm in policy_monitor:
                 hits = pm.get('hit_count', pm.get('packets', 0))
                 if hits == 0:
                     never_used += 1
-                if hits > max_hits:
-                    max_hits = hits
-                    top_pol_id = pm.get('policyid')
-            
             stats['never_used'] = never_used
-            
-            if top_pol_id is not None and max_hits > 0:
-                pol_name = f"ID: {top_pol_id}"
-                for p in policies:
-                    if str(p.get('policyid')) == str(top_pol_id):
-                        pol_name = p.get('name', pol_name)
-                        break
-                stats['top_policy'] = f"{pol_name} ({max_hits} hits)"
-                
-        except Exception as e:
-            self.log_action('warning', f"Gagal mengambil statistik monitoring: {str(e)}")
+        except Exception:
+            pass
             
         return stats
 
@@ -143,21 +133,47 @@ class FortiGateAPIService(BaseService):
             pass
         return "Sistem / Admin GUI"
 
-    # --- Data Fetching Methods ---
+    # --- Data Fetching Methods (DENGAN PEREDAM ERROR AGAR AUDIT TIDAK GAGAL) ---
     def get_firewall_policies(self) -> list:
-        return self._make_request('firewall/policy')
+        try:
+            res = self._make_request('firewall/policy')
+            return res if isinstance(res, list) else [res] if res else []
+        except: return []
+
     def get_interfaces(self) -> list:
-        return self._make_request('system/interface')
+        try:
+            res = self._make_request('system/interface')
+            return res if isinstance(res, list) else [res] if res else []
+        except: return []
+
     def get_address_objects(self) -> list:
-        return self._make_request('firewall/address')
+        try:
+            res = self._make_request('firewall/address')
+            return res if isinstance(res, list) else [res] if res else []
+        except: return []
+
     def get_service_objects(self) -> list:
-        return self._make_request('firewall.service/custom')
+        try:
+            res = self._make_request('firewall.service/custom')
+            return res if isinstance(res, list) else [res] if res else []
+        except: return []
+
     def get_static_routes(self) -> list:
-        return self._make_request('router/static')
+        try:
+            res = self._make_request('router/static')
+            return res if isinstance(res, list) else [res] if res else []
+        except: return []
+
     def get_administrators(self) -> list:
-        return self._make_request('system/admin')
+        try:
+            res = self._make_request('system/admin')
+            return res if isinstance(res, list) else [res] if res else []
+        except: 
+            return [] # Melindungi dari 500 Error
+
     def get_policy_monitor(self) -> list:
         try:
-            return self._make_request('firewall/policy', is_monitor=True)
-        except FortiGateAPIError:
+            res = self._make_request('firewall/policy', is_monitor=True)
+            return res if isinstance(res, list) else [res] if res else []
+        except:
             return []

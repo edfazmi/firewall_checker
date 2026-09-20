@@ -82,6 +82,7 @@
                 <thead>
                     <tr class="bg-gray-50/50">
                         <th class="px-6 py-4 text-left text-sm font-semibold text-gray-600">Device</th>
+                        <th class="px-6 py-4 text-left text-sm font-semibold text-gray-600">Terakhir Sinkronisasi</th>
                         <th class="px-6 py-4 text-center text-sm font-semibold text-gray-600">Total Port Aktif</th>
                         <th class="px-6 py-4 text-center text-sm font-semibold text-gray-600">Total Policy</th>
                         <th class="px-6 py-4 text-center text-sm font-semibold text-gray-600">Policy Tanpa Hit (0)</th>
@@ -96,13 +97,21 @@
                             <div class="text-xs text-gray-500 mt-1">{{ device.ip_address }}</div>
                         </td>
                         
+                        <td class="px-6 py-4 text-left">
+                            <div class="text-sm font-medium text-gray-700">
+                                {% if device.last_sync %}
+                                    {{ device.last_sync|date:"d M Y, H:i" }}
+                                {% else %}
+                                    <span class="text-gray-400 italic">Belum pernah</span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        
                         {% if device.statistics %}
                             <td class="px-6 py-4 text-center text-sm font-medium text-gray-700">{{ device.statistics.total_interfaces_up }}</td>
                             <td class="px-6 py-4 text-center text-sm font-medium text-gray-700">{{ device.statistics.total_policies }}</td>
-                            <td class="px-6 py-4 text-center">
-                                <span class="inline-block px-4 py-1.5 text-sm font-bold rounded-full bg-[#F49A25] text-white shadow-sm">
-                                    {{ device.statistics.never_used_policies_count }}
-                                </span>
+                            <td class="px-6 py-4 text-center text-sm font-medium text-gray-700">
+                                {{ device.statistics.never_used_policies_count }}
                             </td>
                         {% else %}
                             <td colspan="3" class="px-6 py-4 text-center text-sm text-gray-400 italic">Belum disinkronisasi</td>
@@ -119,7 +128,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="5" class="px-6 py-8 text-center text-gray-500">Belum ada perangkat terdaftar.</td>
+                        <td colspan="6" class="px-6 py-8 text-center text-gray-500">Belum ada perangkat terdaftar.</td>
                     </tr>
                     {% endfor %}
                 </tbody>

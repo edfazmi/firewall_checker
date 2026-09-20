@@ -60,7 +60,6 @@ class SyncDeviceView(LoginRequiredMixin, View):
                 stat_obj, created = DeviceStatistic.objects.get_or_create(device=device)
                 stat_obj.total_interfaces_up = stats['up_ports']
                 stat_obj.total_policies = stats['total_policies']
-                stat_obj.top_used_policy = stats['top_policy']
                 stat_obj.never_used_policies_count = stats['never_used']
                 stat_obj.save()
 
