@@ -1,4 +1,3 @@
-# core/exceptions.py
 from typing import Optional
 
 class BaseAppException(Exception):

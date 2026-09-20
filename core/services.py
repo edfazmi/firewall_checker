@@ -1,15 +1,9 @@
-# core/services.py
 import logging
 from typing import Any, Dict, Optional
 
 logger = logging.getLogger('application')
 
-class BaseService:
-    """
-    Base class untuk semua Service Layer.
-    Tujuan: Standardisasi eksekusi business logic dan error handling terpusat.
-    """
-    
+class BaseService:  
     @classmethod
     def execute(cls, *args, **kwargs) -> Any:
         raise NotImplementedError("Setiap service harus mengimplementasikan method execute().")

@@ -1,4 +1,3 @@
-# config/settings.py
 import os
 from pathlib import Path
 from dotenv import load_dotenv
@@ -128,7 +127,6 @@ LOGGING = {
 LOGIN_URL = 'authentication:login'
 LOGIN_REDIRECT_URL = 'dashboard:index'
 
-# --- SECURITY: Session Timeout (5 Menit / 300 Detik) ---
 SESSION_COOKIE_AGE = 300
 SESSION_SAVE_EVERY_REQUEST = True 
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True

@@ -1,17 +1,12 @@
-# authentication/models.py
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.utils.translation import gettext_lazy as _
 
 class Role(models.Model):
-    """
-    Model untuk Role Based Access Control (RBAC).
-    Contoh data: Administrator, Operator, Viewer.
-    """
     name = models.CharField(
         max_length=50, 
         unique=True, 
-        help_text="Nama role (contoh: Administrator, Operator, Viewer)"
+        help_text="Nama role (contoh: Administrator)"
     )
     description = models.TextField(
         blank=True, 
@@ -30,10 +25,6 @@ class Role(models.Model):
 
 
 class User(AbstractUser):
-    """
-    Custom User model yang berelasi dengan tabel Role.
-    Menggunakan email sebagai identifier tambahan jika diperlukan.
-    """
     role = models.ForeignKey(
         Role, 
         on_delete=models.SET_NULL, 
@@ -56,13 +47,3 @@ class User(AbstractUser):
     def is_administrator(self) -> bool:
         """Helper function untuk mengecek apakah user adalah Administrator."""
         return self.role and self.role.name.lower() == 'administrator'
-
-    @property
-    def is_operator(self) -> bool:
-        """Helper function untuk mengecek apakah user adalah Operator."""
-        return self.role and self.role.name.lower() == 'operator'
-
-    @property
-    def is_viewer(self) -> bool:
-        """Helper function untuk mengecek apakah user adalah Viewer."""
-        return self.role and self.role.name.lower() == 'viewer'

@@ -1,12 +1,7 @@
-# audit_logs/models.py
 from django.db import models
 from django.conf import settings
 
 class AuditLog(models.Model):
-    """
-    Model untuk mencatat segala aktivitas kritis di dalam aplikasi.
-    Seperti: Login, Penambahan Device, Sinkronisasi API, dan Perubahan Konfigurasi.
-    """
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, 
         on_delete=models.SET_NULL, 
@@ -50,7 +45,7 @@ class AuditLog(models.Model):
         db_table = 'audit_logs'
         verbose_name = 'Audit Log'
         verbose_name_plural = 'Audit Logs'
-        ordering = ['-timestamp'] # Selalu tampilkan yang terbaru di urutan pertama
+        ordering = ['-timestamp'] 
 
     def __str__(self) -> str:
         user_display = self.user.username if self.user else "System"
