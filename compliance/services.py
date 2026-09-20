@@ -373,8 +373,9 @@ class ComplianceScanner(BaseService):
             pol_id = str(pol.get('policyid', 'Unknown'))
             current_dict[pol_id] = {
                 'name': pol.get('name', ''),
-                'action': pol.get('action', ''),
-                'status': pol.get('status', 'enable'),
+                'action': str(pol.get('action', '')).strip().lower(),
+                'status': str(pol.get('status', 'enable')).strip().lower(),
+                'comments': pol.get('comments', ''),
                 'srcintf': sorted([str(i.get('name', '')).strip() for i in pol.get('srcintf', []) if isinstance(i, dict)]),
                 'dstintf': sorted([str(i.get('name', '')).strip() for i in pol.get('dstintf', []) if isinstance(i, dict)]),
                 'srcaddr': sorted([str(i.get('name', '')).strip() for i in pol.get('srcaddr', []) if isinstance(i, dict)]),
@@ -510,13 +511,11 @@ class ComplianceScanner(BaseService):
             target_name = f"Policy ID {pol['id']} ({pol['name']})"
             related_findings = [f for f in self.findings_to_create if f.element_name == target_name]
             
-            # Hanya memasukkan nama rule (unik)
             for f in related_findings:
                 if f.rule.name not in factors:
                     factors.append(f.rule.name)
                 severities_found.append(f.rule.severity)
 
-            # Kalkulasi Severity Level
             if 'CRITICAL' in severities_found:
                 severity = 'CRITICAL'
             elif 'HIGH' in severities_found:
@@ -530,7 +529,6 @@ class ComplianceScanner(BaseService):
             else:
                 severity = 'INFO'
 
-            # Jika list factors kosong, berarti tidak ada temuan apa-apa pada policy ini
             if not factors:
                 factors.append("Konfigurasi beroperasi normal tanpa temuan konflik.")
 
