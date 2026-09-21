@@ -73,6 +73,17 @@ class ScanResultView(LoginRequiredMixin, DetailView):
             )
             .order_by('-severity_order')
         )
+
+        try:
+            from devices.services import FortiGateAPIService
+            api_service = FortiGateAPIService(device=self.object.device, user=self.request.user)
+            policies = api_service.get_firewall_policies()
+
+            context['deny_policies'] = [p for p in policies if str(p.get('action', '')).lower() == 'deny']
+        except Exception as e:
+            context['deny_policies'] = []
+            print(f"Gagal menarik deny policies: {e}")
+        # ---------------------------------------------------------
         
         return context
 
