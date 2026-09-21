@@ -11,7 +11,6 @@
 
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div class="mb-6">
-            <!-- Kembali ke Dashboard -->
             <a href="/" class="flex items-center gap-2 text-gray-600 hover:text-blue-600 transition font-medium w-fit">
                 <i class="fas fa-arrow-left"></i> Kembali ke Dashboard
             </a>
@@ -64,7 +63,6 @@
                         <input type="text" name="divisi" value="{{ request.user.userprofile.divisi|default_if_none:'' }}" class="sm:w-2/3 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none w-full">
                     </div>
 
-                    <!-- Tombol Trigger Modal Ganti Password -->
                     <div class="flex flex-col sm:flex-row sm:items-center gap-4 pt-2">
                         <div class="flex items-center gap-4 sm:w-1/3">
                             <div class="bg-blue-50 text-blue-600 rounded-full h-10 w-10 flex items-center justify-center shrink-0"><i class="fas fa-fingerprint"></i></div>
@@ -84,7 +82,6 @@
 
             <!-- ================= KANAN: Kartu Profil & List Akun ================= -->
             <div class="flex flex-col gap-6">
-                <!-- Kartu Tampilan Profil -->
                 <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-8 flex flex-col items-center justify-center">
                     <h3 class="w-full text-left font-bold text-gray-800 mb-6">Profil</h3>
                     <div class="bg-[#D1C6B4] text-black font-bold text-6xl rounded-full h-48 w-48 flex items-center justify-center mb-6">
@@ -96,11 +93,9 @@
                     </p>
                 </div>
 
-                <!-- Kartu List Akun -->
                 <div class="bg-gray-100 rounded-xl shadow-sm border border-gray-200 p-6">
                     <div class="flex justify-between items-center mb-6">
                         <h3 class="font-bold text-gray-800">List Akun</h3>
-                        <!-- Tombol Tambah Akun menggunakan onclick -->
                         <button type="button" onclick="bukaModalTambah()" class="bg-slate-700 hover:bg-slate-800 text-white text-sm font-semibold py-2 px-4 rounded-lg shadow-sm transition flex items-center gap-2">
                             <i class="fas fa-plus"></i> Tambah Akun
                         </button>
@@ -120,7 +115,6 @@
                                 
                                 {% if akun.id != request.user.id %}
                                     <div class="flex gap-2">                                        
-                                        <!-- Form untuk menghapus akun dipindah ke dalam for-loop -->
                                         <form action="{% url 'hapus_akun' akun.id %}" method="POST" class="inline" onsubmit="return confirm('Apakah Anda yakin ingin menghapus akun {{ akun.first_name|default:akun.username }}?');">
                                             {% csrf_token %}
                                             <button type="submit" class="bg-red-100 hover:bg-red-200 text-red-600 text-sm font-semibold py-1.5 px-4 rounded transition">Hapus</button>
@@ -227,14 +221,12 @@
 
     <!-- ================= SCRIPT UTAMA ================= -->
     <script>
-        // --- 1. Fungsi Modal Tambah Akun ---
         function bukaModalTambah() {
             document.getElementById('modalTambah').classList.remove('hidden');
         }
 
         function tutupModalTambah() {
             document.getElementById('modalTambah').classList.add('hidden');
-            // Bersihkan form modal
             document.getElementById('inputPwBaru').value = '';
             document.getElementById('inputKonfirmPw').value = '';
             document.getElementById('notifKonfirm').innerHTML = '';
@@ -276,7 +268,6 @@
             }
         }
 
-        // --- 2. Fungsi Modal Ubah Password Profil ---
         function getCookie(name) {
             let cookieValue = null;
             if (document.cookie && document.cookie !== '') {

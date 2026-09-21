@@ -5,12 +5,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Dashboard{% endblock %} - SIKAF PTBA</title>
-    
-    <!-- CDN -->
+
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    
-    <!-- Tailwind Custom Configuration -->
+
     <script>
         tailwind.config = {
             theme: {
@@ -26,26 +24,21 @@
             }
         }
     </script>
-    
-    <!-- Custom Styles -->
+
     <style>
-        /* Sembunyikan scrollbar tapi tetap bisa di-scroll */
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 </head>
 <body class="bg-[#F8F9FB] text-gray-800 font-sans antialiased flex h-screen overflow-hidden relative">
 
-    <!-- Toast & Overlay -->
     <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-3"></div>
     <div id="sidebarOverlay" class="fixed inset-0 bg-black opacity-50 z-40 hidden md:hidden"></div>
 
     <!-- ================= SIDEBAR ================= -->
     <aside id="sidebar" class="fixed inset-y-0 left-0 z-50 w-64 bg-brand-sidebar text-white flex flex-col transform -translate-x-full md:relative md:translate-x-0 transition duration-200 ease-in-out shadow-xl z-50">
-        
-        <!-- Bagian Logo -->
+
         <div class="h-20 flex items-center justify-center border-b border-[#1A2E5E] relative overflow-hidden">
-            <!-- Posisi absolute untuk mencegah padding kosong berlebih di bawah logo -->
             <img src="{% static 'images/logo2-ptba.png' %}" alt="Logo PTBA" class="absolute top-3 left-1/2 transform -translate-x-1/2 w-[85%] pointer-events-none">
             
             <button id="closeSidebarBtn" class="md:hidden absolute right-4 top-6 text-gray-400 hover:text-white z-20 bg-brand-sidebar rounded-full p-1">
@@ -54,8 +47,7 @@
                 </svg>
             </button>
         </div>
-        
-        <!-- Menu Navigasi -->
+
         <nav class="flex-1 px-4 py-8 space-y-3 overflow-y-auto no-scrollbar">
             
             {% url 'dashboard:index' as url_dash %}
@@ -83,7 +75,6 @@
             </a>
         </nav>
 
-        <!-- Kontak / Footer Sidebar -->
         <div class="px-6 py-6 border-t border-[#1A2E5E]">
             <h4 class="text-xs font-semibold text-gray-400 mb-3 uppercase tracking-wider">Contact Person</h4>
             <div class="space-y-2 text-xs text-gray-300">
@@ -105,11 +96,9 @@
 
     <!-- ================= MAIN CONTENT ================= -->
     <main class="flex-1 flex flex-col h-screen overflow-hidden relative">
-        
-        <!-- HEADER TOP BAR -->
+
         <header class="h-20 bg-white border-b border-gray-200 flex items-center justify-between px-6 md:px-10 z-10 w-full shadow-sm">
-            
-            <!-- Kiri: Tombol Mobile & Judul Dinamis -->
+
             <div class="flex items-center">
                 <button id="mobileMenuBtn" class="mr-4 md:hidden text-gray-600 focus:outline-none hover:text-gray-900">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -122,8 +111,7 @@
                     <p class="text-xs text-gray-500 font-medium mt-0.5">{% block header_subtitle %}Overview dan metrik utama sistem{% endblock %}</p>
                 </div>
             </div>
-            
-            <!-- Kanan: Profil User & Logout -->
+
             <div class="flex items-center space-x-6">
                 {% if user.is_authenticated %}
                     <a href="{% url 'kelola_akun' %}" class="flex items-center space-x-3 cursor-pointer hover:opacity-80 transition-opacity">
@@ -149,7 +137,6 @@
             </div>
         </header>
 
-        <!-- KONTEN HALAMAN -->
         <div class="flex-1 overflow-auto p-4 md:p-8">
             {% block content %}{% endblock %}
             
@@ -159,9 +146,7 @@
         </div>
     </main>
 
-    <!-- ================= SCRIPTS ================= -->
     <script>
-        // Script untuk Interaksi Sidebar (Mobile)
         document.addEventListener("DOMContentLoaded", function() {
             const mobileMenuBtn = document.getElementById('mobileMenuBtn');
             const sidebar = document.getElementById('sidebar');
@@ -179,7 +164,6 @@
         });
     </script>
 
-    <!-- Block untuk injeksi script tambahan dari halaman anak (child template) -->
     {% block extra_js %}{% endblock %}
 
 </body>
