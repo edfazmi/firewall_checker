@@ -6,13 +6,12 @@ class Role(models.Model):
     name = models.CharField(
         max_length=50, 
         unique=True, 
+        help_text="Nama role (contoh: Administrator)"
     )
     description = models.TextField(
         blank=True, 
         null=True, 
-    )
-    is_system_admin = models.BooleanField(
-        default=False,
+        help_text="Deskripsi hak akses role ini."
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -24,6 +23,7 @@ class Role(models.Model):
     def __str__(self) -> str:
         return self.name
 
+
 class User(AbstractUser):
     role = models.ForeignKey(
         Role, 
@@ -31,6 +31,7 @@ class User(AbstractUser):
         null=True, 
         blank=True, 
         related_name='users',
+        help_text="Role yang menentukan tingkat akses pengguna dalam aplikasi."
     )
 
     class Meta:
@@ -44,4 +45,5 @@ class User(AbstractUser):
 
     @property
     def is_administrator(self) -> bool:
-        return self.role is not None and self.role.is_system_admin
+        """Helper function untuk mengecek apakah user adalah Administrator."""
+        return self.role and self.role.name.lower() == 'administrator'
