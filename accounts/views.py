@@ -1,13 +1,15 @@
-from django.shortcuts import render, redirect
-from django.contrib.auth.decorators import login_required
-from django.contrib.auth import get_user_model
+from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib.auth.decorators import login_required, user_passes_test
+from django.contrib.auth import get_user_model, update_session_auth_hash
+from django.http import JsonResponse
+from django.db import IntegrityError
 from .models import UserProfile
 import json
-from django.http import JsonResponse
-from django.contrib.auth import update_session_auth_hash
-from django.shortcuts import render, redirect, get_object_or_404
 
 User = get_user_model()
+
+def is_superadmin(user):
+    return user.is_superuser
 
 @login_required
 def kelola_akun(request):
@@ -15,21 +17,30 @@ def kelola_akun(request):
 
     if request.method == 'POST':
         nama_lengkap = request.POST.get('nama_lengkap', '').strip()
-
         nama_parts = nama_lengkap.split(' ', 1)
         first_name = nama_parts[0]
         last_name = nama_parts[1] if len(nama_parts) > 1 else ''
 
+        username_baru = request.POST.get('username', '').strip()
+        email_baru = request.POST.get('email', '').strip()
+
         user = request.user
         user.first_name = first_name
         user.last_name = last_name
-        user.username = request.POST.get('username')
-        user.email = request.POST.get('email')
-        user.save()
-
-        profil.jabatan = request.POST.get('jabatan')
-        profil.divisi = request.POST.get('divisi')
-        profil.save()
+        user.email = email_baru
+        
+        if user.username != username_baru:
+            if User.objects.filter(username=username_baru).exists():
+                return redirect('kelola_akun') 
+            user.username = username_baru
+            
+        try:
+            user.save()
+            profil.jabatan = request.POST.get('jabatan', '').strip()
+            profil.divisi = request.POST.get('divisi', '').strip()
+            profil.save()
+        except IntegrityError:
+            return redirect('kelola_akun')
 
         return redirect('kelola_akun')
 
@@ -44,6 +55,7 @@ def kelola_akun(request):
     }
     return render(request, 'accounts/manage_account.html', context)
 
+@login_required
 def ubah_password_ajax(request):
     if request.method == 'POST':
         try:
@@ -52,15 +64,15 @@ def ubah_password_ajax(request):
             user = request.user
 
             if action == 'cek_lama':
-                password_lama = data.get('password_lama')
+                password_lama = data.get('password_lama', '')
                 if user.check_password(password_lama):
                     return JsonResponse({'status': 'success', 'pesan': 'Password valid.'})
                 else:
                     return JsonResponse({'status': 'error', 'pesan': 'Password lama salah.'}, status=400)
 
             elif action == 'simpan_baru':
-                password_baru = data.get('password_baru')
-                konfirmasi_password = data.get('konfirmasi_password')
+                password_baru = data.get('password_baru', '')
+                konfirmasi_password = data.get('konfirmasi_password', '')
 
                 if len(password_baru) < 8:
                     return JsonResponse({'status': 'error', 'pesan': 'Password minimal 8 karakter.'}, status=400)
@@ -70,45 +82,58 @@ def ubah_password_ajax(request):
 
                 user.set_password(password_baru)
                 user.save()
-
                 update_session_auth_hash(request, user)
                 
                 return JsonResponse({'status': 'success', 'pesan': 'Password berhasil diubah.'})
 
         except Exception as e:
-            return JsonResponse({'status': 'error', 'pesan': str(e)}, status=500)
+            return JsonResponse({'status': 'error', 'pesan': 'Terjadi kesalahan internal.'}, status=500)
             
     return JsonResponse({'status': 'error', 'pesan': 'Metode tidak diizinkan.'}, status=405)
 
+@login_required
+@user_passes_test(is_superadmin) 
 def tambah_akun(request):
     if request.method == 'POST':
-        username = request.POST.get('username')
-        email = request.POST.get('email')
-        password = request.POST.get('password')
+        username = request.POST.get('username', '').strip()
+        email = request.POST.get('email', '').strip()
+        password = request.POST.get('password', '')
+        
+        if len(password) < 8:
+            return redirect('kelola_akun')
+            
+        if User.objects.filter(username=username).exists():
+            return redirect('kelola_akun')
+            
         nama_lengkap = request.POST.get('nama_lengkap', '').strip()
-        jabatan = request.POST.get('jabatan')
-        divisi = request.POST.get('divisi')
+        jabatan = request.POST.get('jabatan', '').strip()
+        divisi = request.POST.get('divisi', '').strip()
 
         nama_parts = nama_lengkap.split(' ', 1)
         first_name = nama_parts[0]
         last_name = nama_parts[1] if len(nama_parts) > 1 else ''
 
-        user_baru = User.objects.create_user(
-            username=username,
-            email=email,
-            password=password,
-            first_name=first_name,
-            last_name=last_name
-        )
+        try:
+            user_baru = User.objects.create_user(
+                username=username,
+                email=email,
+                password=password,
+                first_name=first_name,
+                last_name=last_name
+            )
 
-        UserProfile.objects.create(
-            user=user_baru,
-            jabatan=jabatan,
-            divisi=divisi
-        )
-        
+            UserProfile.objects.create(
+                user=user_baru,
+                jabatan=jabatan,
+                divisi=divisi
+            )
+        except IntegrityError:
+            pass 
+
     return redirect('kelola_akun')
 
+@login_required
+@user_passes_test(is_superadmin) 
 def hapus_akun(request, id_akun):
     if request.method == 'POST':
         akun_dihapus = get_object_or_404(User, id=id_akun)
