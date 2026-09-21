@@ -1,0 +1,79 @@
+<div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mt-8">
+    <div class="mb-6">
+        <h3 class="text-base font-semibold text-gray-900">Ringkasan Eksekusi & Evaluasi per Policy</h3>
+        <p class="text-sm text-gray-600 mt-1">Rangkuman hasil analisis rule, anomali konfigurasi, dan status operasional untuk setiap firewall policy.</p>
+    </div>
+    
+    <div class="max-h-[500px] overflow-y-auto overflow-x-auto custom-scrollbar pr-2">
+        <div class="min-w-[800px]">
+            <div class="grid grid-cols-12 gap-4 mb-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-100 pb-2">
+                <div class="col-span-3">Policy</div>
+                <div class="col-span-2 text-center">Status Keamanan</div>
+                <div class="col-span-7">Ringkasan Temuan / Catatan Evaluasi</div>
+            </div>
+
+            <div class="space-y-3">
+                {% for risk in policy_risks %}
+                <div class="grid grid-cols-12 gap-0 rounded-xl border items-stretch overflow-hidden
+                    {% if risk.severity == 'CRITICAL' or risk.severity == 'HIGH' %} bg-red-50 border-red-200
+                    {% elif risk.severity == 'MEDIUM' %} bg-orange-50 border-orange-200
+                    {% elif risk.severity == 'LOW' %} bg-slate-50 border-gray-200
+                    {% elif risk.severity == 'INFO' %} bg-green-50 border-green-200
+                    {% else %} bg-white border-gray-200 {% endif %}">
+                    
+                    <div class="col-span-3 p-4 flex flex-col justify-center border-r 
+                        {% if risk.severity == 'CRITICAL' or risk.severity == 'HIGH' %} border-red-100
+                        {% elif risk.severity == 'MEDIUM' %} border-orange-100
+                        {% elif risk.severity == 'LOW' %} border-gray-200
+                        {% elif risk.severity == 'INFO' %} border-green-200
+                        {% else %} border-gray-100 {% endif %}">
+                        
+                        <div class="text-sm font-semibold 
+                            {% if risk.severity == 'CRITICAL' or risk.severity == 'HIGH' %} text-red-700
+                            {% elif risk.severity == 'MEDIUM' %} text-orange-700
+                            {% elif risk.severity == 'LOW' %} text-gray-800
+                            {% elif risk.severity == 'INFO' %} text-green-700
+                            {% else %} text-gray-700 {% endif %}">
+                            ID: {{ risk.policy_id }}
+                        </div>
+                        <div class="text-xs text-gray-600 mt-1 leading-snug">{{ risk.policy_name|default:"Tanpa Nama" }}</div>
+                    </div>
+
+                    <div class="col-span-2 p-4 flex items-center justify-center border-r
+                        {% if risk.severity == 'CRITICAL' or risk.severity == 'HIGH' %} border-red-100
+                        {% elif risk.severity == 'MEDIUM' %} border-orange-100
+                        {% elif risk.severity == 'LOW' %} border-gray-200
+                        {% elif risk.severity == 'INFO' %} border-green-200
+                        {% else %} border-gray-100 {% endif %}">
+                        
+                        <div class="text-sm font-bold uppercase tracking-wider
+                            {% if risk.severity == 'CRITICAL' or risk.severity == 'HIGH' %} text-red-600
+                            {% elif risk.severity == 'MEDIUM' %} text-orange-600
+                            {% elif risk.severity == 'LOW' %} text-gray-800
+                            {% elif risk.severity == 'INFO' %} text-green-600
+                            {% else %} text-gray-600 {% endif %}">
+                            {% if risk.severity == 'INFO' %}SAFE{% else %}{{ risk.severity }}{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="col-span-7 p-4 flex flex-col justify-center">
+                        {% if risk.contributing_factors %}
+                        <ul class="list-disc list-inside text-sm text-gray-700 space-y-1.5">
+                            {% for factor in risk.contributing_factors %}
+                                <li>{{ factor }}</li>
+                            {% endfor %}
+                        </ul>
+                        {% else %}
+                        <span class="text-sm text-gray-400 italic">Tidak ada rincian evaluasi tersedia.</span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% empty %}
+                <div class="text-center py-8 text-sm text-gray-500">
+                    Data ringkasan eksekusi belum tersedia.
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>

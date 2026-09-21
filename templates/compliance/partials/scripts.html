@@ -1,0 +1,234 @@
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const counts = { 'CRITICAL': 0, 'HIGH': 0, 'MEDIUM': 0, 'LOW': 0, 'INFO': 0 };
+        document.querySelectorAll('.finding-row').forEach(row => {
+            const sev = row.getAttribute('data-severity');
+            if (counts[sev] !== undefined) counts[sev]++;
+        });
+
+        // Membuat fungsi helper agar aman dari error null (TypeError)
+        const updateCount = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.innerText = val;
+        };
+
+        updateCount('count-critical', counts['CRITICAL']);
+        updateCount('count-high', counts['HIGH']);
+        updateCount('count-medium', counts['MEDIUM']);
+        updateCount('count-low', counts['LOW']);
+        updateCount('count-info', counts['INFO']);
+
+        const denyRows = document.querySelectorAll('.deny-table-row');
+        const emptyDenyState = document.getElementById('empty-deny-state');
+        if (denyRows.length === 0 && emptyDenyState) {
+            emptyDenyState.classList.remove('hidden');
+        }
+    });
+
+    let activeFindingId = null;
+    let activePolicyId = null; 
+
+    function formatIntfAddr(intfs = [], addrs = [], type) {
+        let html = '';
+        if (intfs && intfs.length > 0) {
+            html += `<div class="mb-3"><div class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 sticky top-0 bg-white/90 z-10 py-1">Interface</div>`;
+            html += `<div class="flex flex-wrap gap-2">`;
+            html += intfs.map(i => `<div class="text-xs font-medium text-gray-700 bg-white px-2.5 py-1 rounded-md border border-gray-200 shadow-sm break-all">${i}</div>`).join('');
+            html += `</div></div>`;
+        }
+        if (addrs && addrs.length > 0) {
+            let colorCls = type === 'src' ? 'text-blue-700 bg-blue-50 border-blue-200' : 'text-red-700 bg-red-50 border-red-200';
+            html += `<div><div class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 sticky top-0 bg-white/90 z-10 py-1">Address</div>`;
+            html += `<div class="flex flex-wrap gap-2">`;
+            html += addrs.map(a => `<div class="text-xs font-medium ${colorCls} px-2.5 py-1 rounded-md border shadow-sm break-all">${a}</div>`).join('');
+            html += `</div></div>`;
+        }
+        return html || `<span class="text-sm text-gray-400 italic">Kosong</span>`;
+    }
+
+    function closeDetail(findingId) {
+        if (activeFindingId === findingId) {
+            const mainRow = document.getElementById('row-' + findingId);
+            const detailRow = document.getElementById('detail-' + findingId);
+            if (mainRow && detailRow) {
+                const tbody = mainRow.closest('tbody');
+                const activeBox = mainRow.querySelector('.finding-box');
+                
+                detailRow.classList.remove('active-detail');
+                mainRow.classList.remove('active-row');
+                if (tbody) tbody.classList.remove('table-focus-mode');
+                if (activeBox) activeBox.style.borderBottomWidth = "1px";
+                
+                if (findingId.startsWith('deny-')) {
+                    const btn = document.getElementById('btn-deny-text-' + findingId);
+                    if(btn) btn.innerText = "Lihat detail";
+                } else {
+                    const btn = document.getElementById('btn-text-' + findingId);
+                    const icon = document.getElementById('btn-icon-' + findingId);
+                    if(btn) btn.innerText = "Lihat Detail";
+                    if(icon) icon.style.transform = "rotate(0deg)";
+                    
+                    const btnRel = document.getElementById('btn-rel-text-' + findingId);
+                    const iconRel = document.getElementById('btn-rel-icon-' + findingId);
+                    if(btnRel) btnRel.innerText = "Lihat Detail";
+                    if(iconRel) iconRel.style.transform = "rotate(0deg)";
+                }
+            }
+            activeFindingId = null;
+            activePolicyId = null;
+        }
+    }
+
+    function toggleDetail(findingId, deviceId, policyStr, btnPrefix = 'btn') {
+        const match = policyStr.match(/ID\s+(\d+)/);
+        if (!match) { alert('Nomor ID Policy tidak terdeteksi.'); return; }
+        const policyId = match[1];
+
+        if (activeFindingId === findingId && activePolicyId === policyId) {
+            closeDetail(findingId);
+            return;
+        }
+
+        const mainRow = document.getElementById('row-' + findingId);
+        
+        let detailRow = document.getElementById('detail-' + findingId);
+        if (!detailRow) {
+            detailRow = document.createElement('tr');
+            detailRow.id = 'detail-' + findingId;
+            detailRow.className = 'detail-row bg-slate-50';
+            
+            let thead = mainRow.closest('table').querySelector('thead');
+            let colspan = thead ? thead.querySelectorAll('th').length : 4;
+            
+            let templateHtml = document.getElementById('policy-detail-template').innerHTML;
+            templateHtml = templateHtml.replace(/{ID}/g, findingId).replace(/{COLSPAN}/g, colspan);
+            
+            detailRow.innerHTML = templateHtml;
+            mainRow.parentNode.insertBefore(detailRow, mainRow.nextSibling);
+        }
+
+        const tbody = mainRow.closest('tbody'); 
+        const activeBox = mainRow.querySelector('.finding-box');
+
+        const clickedBtnText = document.getElementById(btnPrefix + '-text-' + findingId);
+        const clickedBtnIcon = document.getElementById(btnPrefix + '-icon-' + findingId);
+
+        function resetButton(prefix, fid, defaultText) {
+            const t = document.getElementById(prefix + '-text-' + fid);
+            const i = document.getElementById(prefix + '-icon-' + fid);
+            if (t) t.innerText = defaultText;
+            if (i) i.style.transform = "rotate(0deg)";
+        }
+
+        if (activeFindingId !== null && activeFindingId !== findingId) {
+            const oldDetail = document.getElementById('detail-' + activeFindingId);
+            const oldMain = document.getElementById('row-' + activeFindingId);
+            if (oldDetail) oldDetail.classList.remove('active-detail');
+            if (oldMain) {
+                oldMain.classList.remove('active-row');
+                const oldTbody = oldMain.closest('tbody');
+                if (oldTbody) oldTbody.classList.remove('table-focus-mode');
+                const oldBox = oldMain.querySelector('.finding-box');
+                if (oldBox) oldBox.style.borderBottomWidth = "1px";
+                resetButton('btn', activeFindingId, "Lihat Detail");
+                resetButton('btn-rel', activeFindingId, "Lihat Detail");
+                resetButton('btn-deny', activeFindingId, "Lihat detail");
+            }
+        }
+
+        activeFindingId = findingId;
+        activePolicyId = policyId;
+        tbody.classList.add('table-focus-mode');
+        mainRow.classList.add('active-row');
+        detailRow.classList.add('active-detail');
+        if(activeBox) activeBox.style.borderBottomWidth = "0px";
+        
+        if (clickedBtnText) clickedBtnText.innerText = "Tutup Detail";
+        if (clickedBtnIcon) clickedBtnIcon.style.transform = "rotate(180deg)";
+        
+        if (btnPrefix === 'btn') {
+            resetButton('btn-rel', findingId, "Lihat Detail");
+        } else if (btnPrefix === 'btn-rel') {
+            resetButton('btn', findingId, "Lihat Detail");
+        }
+        
+        document.getElementById('title-' + findingId).innerText = `Detail ${policyStr}`;
+
+        document.getElementById('loader-' + findingId).classList.remove('hidden');
+        document.getElementById('content-' + findingId).classList.add('hidden');
+        
+        document.getElementById('p-id-name-' + findingId).innerText = '-';
+
+        fetch(`/compliance/api/device/${deviceId}/policy/${policyId}/`)
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('loader-' + findingId).classList.add('hidden');
+                document.getElementById('content-' + findingId).classList.remove('hidden');
+
+                if (data.error) {
+                    document.getElementById('p-comment-' + findingId).innerHTML = `<span class="text-red-500 font-medium">${data.error}</span>`;
+                    return;
+                }
+                
+                document.getElementById('p-id-name-' + findingId).innerText = `${data.id || '-'} - ${data.name || '-'}`;
+                
+                const st = document.getElementById('p-status-' + findingId);
+                let statusVal = data.status || '-';
+                st.innerText = statusVal;
+                st.className = (statusVal === 'Enabled' || statusVal === 'enable') ? 'px-2.5 py-1 rounded-md text-xs font-medium border border-green-200 text-green-700 bg-green-50' : 'px-2.5 py-1 rounded-md text-xs font-medium border border-red-200 text-red-600 bg-red-50';
+                
+                const ac = document.getElementById('p-action-' + findingId);
+                let actionVal = (data.action || '').toUpperCase();
+                ac.innerText = actionVal || '-';
+                ac.className = actionVal === 'ACCEPT' ? 'text-green-600 font-semibold text-sm' : 'text-red-600 font-semibold text-sm';
+                
+                document.getElementById('p-nat-' + findingId).innerText = data.nat || 'disable';
+                
+                let logVal = data.logtraffic || 'disable';
+                document.getElementById('p-log-' + findingId).innerHTML = `<span class="px-2.5 py-1 rounded-md text-xs font-medium border border-gray-200 text-gray-700 bg-white">${logVal}</span>`;
+
+                const srcIntf = Array.isArray(data.srcintf) ? data.srcintf : [];
+                const srcAddr = Array.isArray(data.srcaddr) ? data.srcaddr : [];
+                const dstIntf = Array.isArray(data.dstintf) ? data.dstintf : [];
+                const dstAddr = Array.isArray(data.dstaddr) ? data.dstaddr : [];
+                
+                document.getElementById('p-src-' + findingId).innerHTML = formatIntfAddr(srcIntf, srcAddr, 'src');
+                document.getElementById('p-dst-' + findingId).innerHTML = formatIntfAddr(dstIntf, dstAddr, 'dst');
+                
+                const svc = Array.isArray(data.service) ? data.service : [];
+                document.getElementById('p-svc-' + findingId).innerHTML = svc.length ? `<div class="flex flex-wrap gap-2">` + svc.map(s => `<div class="text-xs font-medium text-purple-700 bg-purple-50 px-2.5 py-1 rounded-md border border-purple-200 shadow-sm break-all">${s}</div>`).join('') + `</div>` : '<span class="text-sm text-gray-400 italic">Any</span>';
+                document.getElementById('p-sch-' + findingId).innerText = data.schedule || 'always';
+
+                let secHtml = '';
+                const sp = data.security_profiles || {}; 
+                const secs = [
+                    { k: 'Antivirus', v: sp['Antivirus'], c: 'text-red-700 bg-red-50 border-red-200' },
+                    { k: 'Web Filter', v: sp['Web Filter'], c: 'text-green-700 bg-green-50 border-green-200' },
+                    { k: 'IPS Sensor', v: sp['IPS Sensor'], c: 'text-orange-700 bg-orange-50 border-orange-200' },
+                    { k: 'App Control', v: sp['App Control'], c: 'text-blue-700 bg-blue-50 border-blue-200' }
+                ];
+                secs.forEach(s => {
+                    if(s.v) secHtml += `<div class="flex items-center justify-between py-2 border-b border-gray-100 last:border-0"><span class="text-xs font-medium text-gray-600">${s.k}</span><span class="text-xs font-semibold px-2.5 py-1 rounded border shadow-sm ${s.c} break-all">${s.v}</span></div>`;
+                });
+                document.getElementById('p-sec-' + findingId).innerHTML = secHtml || '<span class="text-sm text-gray-400 italic font-medium">Profile Tidak Aktif</span>';
+
+                const pool = Array.isArray(data.poolname) ? data.poolname : [];
+                document.getElementById('p-pool-' + findingId).innerHTML = pool.length ? `<div class="flex flex-wrap gap-2">` + pool.map(p => `<div class="text-xs font-medium text-gray-800 bg-white px-2.5 py-1 rounded-md border border-gray-200 shadow-sm break-all">${p}</div>`).join('') + `</div>` : '<span class="text-sm text-gray-400 italic font-medium">Tidak ada IP Pool</span>';
+
+                document.getElementById('p-comment-' + findingId).innerText = data.comments || 'Tidak ada catatan atau komentar tambahan pada policy ini.';
+            })
+            .catch(err => {
+                console.error(err);
+                document.getElementById('loader-' + findingId).classList.add('hidden');
+                document.getElementById('content-' + findingId).classList.remove('hidden');
+                document.getElementById('p-comment-' + findingId).innerHTML = '<span class="text-red-500 font-medium">Gagal mengambil atau memproses data dari API. Silakan coba lagi.</span>';
+            });
+    }
+
+    window.addEventListener('pagehide', function() {
+        var urlHapus = "{% url 'compliance:hapus_scan_otomatis' %}";
+        var formData = new FormData();
+        formData.append('scan_id', '{{ scan.id }}');
+        navigator.sendBeacon(urlHapus, formData);
+    });
+</script>

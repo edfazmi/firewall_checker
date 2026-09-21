@@ -1,0 +1,19 @@
+<style>
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 8px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    
+    .table-focus-mode .finding-row:not(.active-row) { opacity: 0.3; filter: grayscale(50%); pointer-events: none; transition: all 0.3s ease; }
+    .detail-row { display: none; }
+    .detail-row.active-detail { display: table-row; animation: slideDownFade 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+    
+    @keyframes slideDownFade { 
+        from { opacity: 0; transform: translateY(-10px); } 
+        to { opacity: 1; transform: translateY(0); } 
+    }
+
+    .deny-table-wrapper { counter-reset: deny-counter; }
+    .deny-table-row { counter-increment: deny-counter; }
+    .deny-table-row .row-number::before { content: counter(deny-counter); }
+</style>
