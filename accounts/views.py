@@ -42,7 +42,7 @@ def kelola_akun(request):
         'semua_akun': semua_akun,
         'inisial_profil': inisial,
     }
-    return render(request, 'accounts/kelola_akun.html', context)
+    return render(request, 'accounts/manage_account.html', context)
 
 def ubah_password_ajax(request):
     if request.method == 'POST':
