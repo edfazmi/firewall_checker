@@ -8,7 +8,7 @@ from devices.services import FortiGateAPIService
 from compliance.models import ComplianceRule, ScanHistory, Finding, PolicyRiskAssessment
 
 from .rules import RuleEngine
-from .change_detector import ConfigurationDiffService
+
 
 logger = logging.getLogger('application')
 
@@ -39,6 +39,7 @@ class ComplianceScanner(BaseService):
             ('ROUTE_NO_DEFAULT', 'Missing Default Route', 'Tidak ada static route default (0.0.0.0/0) yang aktif.', 'MEDIUM', 'Pastikan firewall memiliki rute keluar (gateway) yang valid.'),
             ('ADDR_DUP_SUBNET', 'Duplicate Address Object', 'Terdapat objek address berbeda yang menunjuk ke subnet yang sama persis.', 'LOW', 'Gabungkan atau hapus objek address yang berulang.'),
             ('SVC_WIDE_PORT', 'Wide Port Range Service', 'Service membuka rentang port yang sangat besar (1-65535).', 'LOW', 'Persempit rentang port sesuai kebutuhan aplikasi.'),
+            ('POL_NO_LOG', 'Logging Policy Disabled', 'Fitur pencatatan log pada policy tidak diaktifkan.', 'MEDIUM', 'Aktifkan Log Allowed Traffic, minimal untuk Security Events.')
         ]
         
         for code, name, desc, sev, rec in core_rules:
@@ -108,10 +109,6 @@ class ComplianceScanner(BaseService):
         if hasattr(self, 'log_action'):
             self.log_action('info', "Scan sukses diselesaikan.")
 
-    def has_config_changed(self):
-        diff_service = ConfigurationDiffService(self.device)
-        return diff_service.has_config_changed()
-
     def execute_scan(self) -> ScanHistory:
         ScanHistory.objects.filter(device=self.device).delete()
         self.scan_record = ScanHistory.objects.create(device=self.device, status='RUNNING')
@@ -134,9 +131,6 @@ class ComplianceScanner(BaseService):
             self.findings_to_create.extend(findings)
 
             self._assess_policy_risks(parsed_policies)
-
-            diff_service = ConfigurationDiffService(self.device)
-            diff_service.detect_changes(policies, self.scan_record, recent_admin)
 
             self._finalize_scan()
             return self.scan_record

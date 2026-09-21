@@ -88,6 +88,16 @@ class RuleEngine:
                 "message": "Policy aktif namun 0 hits.", "hit_count": 0, "last_used": hit_data.get('last_used', 'N/A')
             })
 
+    def _rule_pol_no_log(self, pol, target_name):
+        if 'POL_NO_LOG' in self.active_rules:
+            log_status = str(pol.get('logtraffic', 'disable')).strip().lower()
+            
+            if log_status in ['disable', '', 'none', 'false', 'disabled']:
+                self._add_finding('POL_NO_LOG', target_name, {
+                    "message": "Fitur logging dimatikan pada policy ini.",
+                    "logtraffic_value": log_status
+                })
+
     def _rule_pol_duplicate(self, pol_a, pol_b, action_a, action_b, combined_rel, target_b_name, info_json):
         if combined_rel == 'EXACT' and action_a == action_b and 'POL_DUPLICATE' in self.active_rules:
             info_json["message"] = "Duplikasi identik terdeteksi."
@@ -188,6 +198,7 @@ class RuleEngine:
             target_name = f"Policy ID {pol_id} ({pol_name})"
 
             self._rule_pol_no_desc(pol, target_name)
+            self._rule_pol_no_log(pol, target_name)
             self._rule_pol_overly_permissive(action, src_addrs_str, dst_addrs_str, target_name)
             self._rule_pol_any_intf(action, src_intf, dst_intf, target_name)
             self._rule_pol_any_svc(action, services, target_name)

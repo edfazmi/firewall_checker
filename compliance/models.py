@@ -43,7 +43,6 @@ class ScanHistory(models.Model):
     scan_date = models.DateTimeField(auto_now_add=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='RUNNING')
     error_message = models.TextField(blank=True, null=True)
-    changes_detail = models.JSONField(default=dict, blank=True, null=True)
 
     class Meta:
         db_table = 'scan_histories'
@@ -68,9 +67,4 @@ class PolicyRiskAssessment(models.Model):
 
     class Meta:
         db_table = 'policy_risk_assessments'
-
-class ConfigurationSnapshot(models.Model):
-    device = models.OneToOneField(Device, on_delete=models.CASCADE, related_name='config_snapshot')
-    policies_json = models.JSONField(default=dict)
-    last_updated = models.DateTimeField(auto_now=True)
 
