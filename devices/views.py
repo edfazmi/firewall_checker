@@ -7,7 +7,7 @@ from django.contrib import messages
 from .models import Device, DeviceStatistic
 from .forms import DeviceForm
 from .services import FortiGateAPIService
-from core.exceptions import FortiGateAPIError
+from core.exceptions import FirewallAPIError
 
 class DeviceListView(LoginRequiredMixin, ListView):
     model = Device
@@ -61,7 +61,7 @@ class SyncDeviceView(LoginRequiredMixin, View):
                 stat_obj.save()
 
             messages.success(request, f"Koneksi ke {device.name} berhasil. Data monitoring telah diperbarui.")
-        except FortiGateAPIError as e:
+        except FirewallAPIError as e:
             messages.error(request, f"Gagal Sinkronisasi: {str(e)}")
         except Exception as e:
             messages.error(request, f"Kesalahan Sistem: {str(e)}")

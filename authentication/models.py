@@ -45,5 +45,4 @@ class User(AbstractUser):
 
     @property
     def is_administrator(self) -> bool:
-        """Helper function untuk mengecek apakah user adalah Administrator."""
         return self.role and self.role.name.lower() == 'administrator'

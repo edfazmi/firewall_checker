@@ -27,10 +27,6 @@ class RuleEngine:
         if intf.get('ip', '0.0.0.0 0.0.0.0') == '0.0.0.0 0.0.0.0' and status == 'up' and 'INTF_NO_IP' in self.active_rules:
             self._add_finding('INTF_NO_IP', f"Interface {intf_name}", intf)
 
-    def _rule_adm_no_trusthost(self, admin, admin_name):
-        if admin.get('trusthost1', '0.0.0.0 0.0.0.0') == '0.0.0.0 0.0.0.0' and 'ADM_NO_TRUSTHOST' in self.active_rules:
-            self._add_finding('ADM_NO_TRUSTHOST', f"Admin {admin_name}", admin)
-
     def _rule_route_no_default(self, routes):
         if not any(r.get('dst', '') == '0.0.0.0 0.0.0.0' and r.get('status', 'enable') == 'enable' for r in routes):
             if 'ROUTE_NO_DEFAULT' in self.active_rules:
@@ -152,11 +148,6 @@ class RuleEngine:
             self._rule_intf_down(intf, intf_name, status)
             self._rule_intf_no_ip(intf, intf_name, status)
 
-    def _check_administrators(self, admins: List[Dict[str, Any]]):
-        for admin in admins:
-            admin_name = admin.get('name', 'Unknown')
-            self._rule_adm_no_trusthost(admin, admin_name)
-
     def _check_routing(self, routes: List[Dict[str, Any]]):
         self._rule_route_no_default(routes)
 
@@ -239,13 +230,12 @@ class RuleEngine:
                         
         return parsed_policies
         
-    def run_all_checks(self, policies, interfaces, admins, routes, addresses, services, policy_hits) -> Tuple[List[Finding], List[Dict]]:
+    def run_all_checks(self, policies, interfaces, routes, addresses, services, policy_hits) -> Tuple[List[Finding], List[Dict]]:
         address_map = network_utils.build_address_map(addresses)
 
         parsed_policies = self._check_policies_and_relationships(policies, address_map)
         self._check_unused_policies(policies, policy_hits)
         self._check_interfaces(interfaces)
-        self._check_administrators(admins)
         self._check_routing(routes)
         self._check_address_objects(addresses)
         self._check_service_objects(services)

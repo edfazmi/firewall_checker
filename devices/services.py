@@ -3,9 +3,8 @@ import urllib3
 from typing import Dict, Any, Optional
 from django.utils import timezone
 from core.services import BaseService
-from core.exceptions import FortiGateAPIError
+from core.exceptions import FirewallAPIError
 from devices.models import Device
-from audit_logs.models import AuditLog
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -33,22 +32,22 @@ class FortiGateAPIService(BaseService):
             data = response.json()
             
             if data.get('http_status') not in [200, 201] and 'results' not in data:
-                 raise FortiGateAPIError(f"API Error: {data.get('error', 'Unknown Error')}")
+                 raise FirewallAPIError(f"API Error: {data.get('error', 'Unknown Error')}")
                  
             return data.get('results', data)
 
         except requests.exceptions.Timeout:
-            raise FortiGateAPIError(f"Timeout saat menghubungi {self.device.ip_address}")
+            raise FirewallAPIError(f"Timeout saat menghubungi {self.device.ip_address}")
         except requests.exceptions.ConnectionError:
-            raise FortiGateAPIError(f"Gagal koneksi ke {self.device.ip_address}. Pastikan IP dan Port benar.")
+            raise FirewallAPIError(f"Gagal koneksi ke {self.device.ip_address}. Pastikan IP dan Port benar.")
         except requests.exceptions.HTTPError as err:
             if err.response.status_code == 401:
-                raise FortiGateAPIError("Otentikasi gagal. API Token tidak valid atau tidak memiliki akses admin.")
+                raise FirewallAPIError("Otentikasi gagal. API Token tidak valid atau tidak memiliki akses admin.")
             elif err.response.status_code == 403:
-                raise FortiGateAPIError("Akses ditolak (Forbidden). Periksa izin API Profile di FortiGate.")
-            raise FortiGateAPIError(f"HTTP Error: {str(err)}")
+                raise FirewallAPIError("Akses ditolak (Forbidden). Periksa izin API Profile di FortiGate.")
+            raise FirewallAPIError(f"HTTP Error: {str(err)}")
         except Exception as e:
-            raise FortiGateAPIError(f"Terjadi kesalahan yang tidak terduga: {str(e)}")
+            raise FirewallAPIError(f"Terjadi kesalahan yang tidak terduga: {str(e)}")
 
     def _update_device_status(self, status: str, os_version: Optional[str] = None):
         self.device.connection_status = status
@@ -57,15 +56,6 @@ class FortiGateAPIService(BaseService):
             if os_version:
                 self.device.os_version = os_version
         self.device.save(update_fields=['connection_status', 'last_sync', 'os_version'])
-
-    def _create_audit_log(self, action: str, details: str):
-        AuditLog.objects.create(
-            user=self.user,
-            action=action,
-            target_type="Device",
-            target_id=self.device.id,
-            details={"message": details}
-        )
 
     def test_connection(self) -> bool:
         try:
@@ -84,12 +74,25 @@ class FortiGateAPIService(BaseService):
                 version = str(version)
                  
             self._update_device_status('CONNECTED', os_version=version)
-            self._create_audit_log("TEST_CONNECTION_SUCCESS", f"Berhasil terkoneksi ke {self.device.name}")
             return True
+            
+        except requests.exceptions.Timeout:
+            self._update_device_status('ERROR')
+            raise FirewallAPIError(f"Waktu habis (Timeout). Perangkat {self.device.ip_address} tidak merespons, pastikan perangkat aktif dan jaringan lancar.")
+            
+        except requests.exceptions.ConnectionError:
+            self._update_device_status('ERROR')
+            raise FirewallAPIError(f"Gagal terhubung. Pastikan alamat IP {self.device.ip_address} dan port sudah benar, serta perangkat dapat dijangkau.")
+            
+        except requests.exceptions.HTTPError as err:
+            self._update_device_status('ERROR')
+            if err.response.status_code in [401, 403]:
+                raise FirewallAPIError("Akses ditolak. Token API tidak valid atau izin akses profil kurang.")
+            raise FirewallAPIError("Gagal melakukan sinkronisasi dengan perangkat karena masalah autentikasi.")
             
         except Exception as e:
             self._update_device_status('ERROR')
-            raise FortiGateAPIError(f"Test Koneksi Gagal: {str(e)}")
+            raise FirewallAPIError("Terjadi kendala saat memeriksa status perangkat. Silakan coba lagi beberapa saat.")
 
     def fetch_statistics(self) -> dict:
         stats = {'up_ports': 0, 'total_policies': 0, 'never_used': 0}
@@ -119,57 +122,26 @@ class FortiGateAPIService(BaseService):
             
         return stats
 
-    def get_recent_admin(self) -> str:
-        try:
-            logs = self._make_request('log/memory/event/system?count=15', is_monitor=True)
-            for log in logs:
-                msg = str(log.get('msg', '')).lower()
-                if 'attribute configured' in msg or 'edit firewall policy' in msg or 'policy' in msg:
-                    return log.get('user', 'Administrator')
-        except:
-            pass
-        return "Sistem / Admin GUI"
-
     def get_firewall_policies(self) -> list:
-        try:
-            res = self._make_request('firewall/policy')
-            return res if isinstance(res, list) else [res] if res else []
-        except: return []
+        res = self._make_request('firewall/policy')
+        return res if isinstance(res, list) else [res] if res else []
 
     def get_interfaces(self) -> list:
-        try:
-            res = self._make_request('system/interface')
-            return res if isinstance(res, list) else [res] if res else []
-        except: return []
+        res = self._make_request('system/interface')
+        return res if isinstance(res, list) else [res] if res else []
 
     def get_address_objects(self) -> list:
-        try:
-            res = self._make_request('firewall/address')
-            return res if isinstance(res, list) else [res] if res else []
-        except: return []
+        res = self._make_request('firewall/address')
+        return res if isinstance(res, list) else [res] if res else []
 
     def get_service_objects(self) -> list:
-        try:
-            res = self._make_request('firewall.service/custom')
-            return res if isinstance(res, list) else [res] if res else []
-        except: return []
+        res = self._make_request('firewall.service/custom')
+        return res if isinstance(res, list) else [res] if res else []
 
     def get_static_routes(self) -> list:
-        try:
-            res = self._make_request('router/static')
-            return res if isinstance(res, list) else [res] if res else []
-        except: return []
-
-    def get_administrators(self) -> list:
-        try:
-            res = self._make_request('system/admin')
-            return res if isinstance(res, list) else [res] if res else []
-        except: 
-            return [] 
+        res = self._make_request('router/static')
+        return res if isinstance(res, list) else [res] if res else []
 
     def get_policy_monitor(self) -> list:
-        try:
-            res = self._make_request('firewall/policy', is_monitor=True)
-            return res if isinstance(res, list) else [res] if res else []
-        except:
-            return []
+        res = self._make_request('firewall/policy', is_monitor=True)
+        return res if isinstance(res, list) else [res] if res else []

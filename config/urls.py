@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.urls import path, include
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
+    path('sys-manage-portal/', admin.site.urls),
     path('auth/', include('authentication.urls')),
     path('devices/', include('devices.urls')),
     path('compliance/', include('compliance.urls')),

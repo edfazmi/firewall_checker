@@ -2,7 +2,7 @@ import logging
 from typing import Dict, List
 from django.utils import timezone
 from core.services import BaseService
-from core.exceptions import ComplianceEngineError, FortiGateAPIError
+from core.exceptions import ComplianceEngineError, FirewallAPIError
 from devices.models import Device
 from devices.services import FortiGateAPIService
 from compliance.models import ComplianceRule, ScanHistory, Finding, PolicyRiskAssessment
@@ -35,7 +35,6 @@ class ComplianceScanner(BaseService):
             ('POL_NO_DESC', 'Policy without Description/Comment', 'Policy tidak memiliki komentar atau deskripsi.', 'LOW', 'Tambahkan komentar yang menjelaskan tujuan bisnis dari policy tersebut.'),
             ('INTF_DOWN', 'Interface Down', 'Interface dalam keadaan admin down.', 'INFO', 'Verifikasi apakah interface ini masih dibutuhkan.'),
             ('INTF_NO_IP', 'Interface Active Without IP', 'Interface berstatus UP namun tidak memiliki konfigurasi IP.', 'LOW', 'Berikan IP Address atau nonaktifkan interface jika tidak digunakan.'),
-            ('ADM_NO_TRUSTHOST', 'Admin tanpa Trusted Host', 'Akun administrator dapat diakses dari IP manapun tanpa pembatasan.', 'HIGH', 'Konfigurasi Trusted Host (Restricted IP) untuk akun administrator.'),
             ('ROUTE_NO_DEFAULT', 'Missing Default Route', 'Tidak ada static route default (0.0.0.0/0) yang aktif.', 'MEDIUM', 'Pastikan firewall memiliki rute keluar (gateway) yang valid.'),
             ('ADDR_DUP_SUBNET', 'Duplicate Address Object', 'Terdapat objek address berbeda yang menunjuk ke subnet yang sama persis.', 'LOW', 'Gabungkan atau hapus objek address yang berulang.'),
             ('SVC_WIDE_PORT', 'Wide Port Range Service', 'Service membuka rentang port yang sangat besar (1-65535).', 'LOW', 'Persempit rentang port sesuai kebutuhan aplikasi.'),
@@ -116,17 +115,14 @@ class ComplianceScanner(BaseService):
         try:
             policies = self.api_service.get_firewall_policies()
             interfaces = self.api_service.get_interfaces()
-            admins = self.api_service.get_administrators()
             routes = self.api_service.get_static_routes()
             addresses = self.api_service.get_address_objects()
             services = self.api_service.get_service_objects()
             policy_hits = self.api_service.get_policy_monitor()
-            
-            recent_admin = self.api_service.get_recent_admin() if hasattr(self.api_service, 'get_recent_admin') else "Unknown"
 
             rule_engine = RuleEngine(self.scan_record, self.active_rules)
             findings, parsed_policies = rule_engine.run_all_checks(
-                policies, interfaces, admins, routes, addresses, services, policy_hits
+                policies, interfaces, routes, addresses, services, policy_hits
             )
             self.findings_to_create.extend(findings)
 
@@ -135,7 +131,7 @@ class ComplianceScanner(BaseService):
             self._finalize_scan()
             return self.scan_record
 
-        except FortiGateAPIError as e:
+        except FirewallAPIError as e:
             self.scan_record.status = 'FAILED'
             self.scan_record.error_message = str(e)
             self.scan_record.save()

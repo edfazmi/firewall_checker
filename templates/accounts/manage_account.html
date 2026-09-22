@@ -88,7 +88,7 @@
                                 <i class="fas fa-plus"></i> Tambah Akun
                             </button>
                         {% else %}
-                            <button type="button" disabled class="bg-gray-400 text-gray-200 text-sm font-semibold py-2 px-4 rounded-lg shadow-sm flex items-center gap-2 cursor-not-allowed" title="Hanya Super Admin yang dapat menambah akun">
+                            <button type="button" disabled class="bg-gray-400 text-gray-200 text-sm font-semibold py-2 px-4 rounded-lg shadow-sm flex items-center gap-2 cursor-not-allowed">
                                 <i class="fas fa-plus"></i> Tambah Akun
                             </button>
                         {% endif %}
@@ -107,12 +107,12 @@
                                 {% if akun.id != request.user.id %}
                                     <div class="flex gap-2">                                        
                                         {% if request.user.is_superuser %}
-                                            <form action="{% url 'hapus_akun' akun.id %}" method="POST" class="inline" onsubmit="return confirm('Apakah Anda yakin ingin menghapus akun {{ akun.first_name|default:akun.username }}?');">
+                                            <form action="{% url 'hapus_akun' akun.id %}" method="POST" class="inline" id="formHapus_{{ akun.id }}">
                                                 {% csrf_token %}
-                                                <button type="submit" class="bg-red-100 hover:bg-red-200 text-red-600 text-sm font-semibold py-1.5 px-4 rounded transition">Hapus</button>
+                                                <button type="button" onclick="bukaModalKonfirmasiHapus('{{ akun.first_name|default:akun.username|escapejs }}', 'formHapus_{{ akun.id }}')" class="bg-red-100 hover:bg-red-200 text-red-600 text-sm font-semibold py-1.5 px-4 rounded transition">Hapus</button>
                                             </form>
                                         {% else %}
-                                            <button type="button" disabled class="bg-gray-200 text-gray-400 text-sm font-semibold py-1.5 px-4 rounded cursor-not-allowed" title="Hanya Super Admin yang dapat menghapus akun">Hapus</button>
+                                            <button type="button" disabled class="bg-gray-200 text-gray-400 text-sm font-semibold py-1.5 px-4 rounded cursor-not-allowed">Hapus</button>
                                         {% endif %}
                                     </div>
                                 {% endif %}
@@ -125,6 +125,7 @@
             </div>
         </div>
     </div>
+
     <div id="modalPassword" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
         <div class="bg-white rounded-xl shadow-lg w-full max-w-md p-6 relative">
             <h3 class="text-xl font-bold text-gray-800 mb-4 border-b pb-2">Ubah Password</h3>
@@ -157,6 +158,7 @@
             </div>
         </div>
     </div>
+
     <div id="modalTambah" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
         <div class="bg-white rounded-xl shadow-lg w-full max-w-2xl p-6 relative max-h-[90vh] overflow-y-auto">
             <h3 class="text-xl font-bold text-gray-800 mb-4 border-b pb-2">Tambah Akun Baru</h3>
@@ -202,6 +204,33 @@
             </form>
         </div>
     </div>
+
+    <div id="modalKonfirmasiHapus" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 transition-opacity">
+        <div class="bg-white rounded-xl shadow-lg w-full max-w-sm p-6 relative transform transition-all text-center">
+            <div class="mx-auto flex items-center justify-center h-14 w-14 rounded-full bg-red-100 mb-4">
+                <i class="fas fa-exclamation-triangle text-2xl text-red-600"></i>
+            </div>
+            <h3 class="text-lg font-bold text-gray-900 mb-2">Hapus Akun</h3>
+            <p class="text-sm text-gray-500 mb-6">Apakah Anda yakin ingin menghapus akun <span id="namaAkunHapus" class="font-bold text-gray-700"></span>? Tindakan ini tidak dapat dibatalkan.</p>
+            <div class="flex justify-center gap-3">
+                <button type="button" onclick="tutupModalKonfirmasiHapus()" class="w-full px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-lg font-semibold transition">Batal</button>
+                <button type="button" onclick="eksekusiHapus()" class="w-full px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold transition shadow-sm">Ya, Hapus</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modalAlert" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 transition-opacity">
+        <div class="bg-white rounded-xl shadow-lg w-full max-w-sm p-6 relative transform transition-all text-center">
+            <div id="alertIconContainer" class="mx-auto flex items-center justify-center h-14 w-14 rounded-full mb-4">
+            </div>
+            <h3 id="alertJudul" class="text-lg font-bold text-gray-900 mb-2">Pemberitahuan</h3>
+            <p id="alertPesan" class="text-sm text-gray-500 mb-6"></p>
+            <div class="flex justify-center">
+                <button type="button" id="btnTutupAlert" onclick="tutupModalAlert()" class="w-full px-4 py-2 rounded-lg font-semibold transition shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2">Tutup</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         function bukaModalTambah() {
             document.getElementById('modalTambah').classList.remove('hidden');
@@ -256,6 +285,7 @@
             }
             return cookieValue;
         }
+
         function tampilkanNotif(pesan, tipe) {
             var notif = document.getElementById('notifModal');
             notif.innerHTML = pesan;
@@ -264,6 +294,47 @@
                 notif.classList.add('bg-red-100', 'text-red-700');
             } else {
                 notif.classList.add('bg-green-100', 'text-green-700');
+            }
+        }
+        function tampilkanAlert(judul, pesan, tipe) {
+            document.getElementById('alertJudul').innerText = judul;
+            document.getElementById('alertPesan').innerText = pesan;
+            const iconContainer = document.getElementById('alertIconContainer');
+            const btnTutup = document.getElementById('btnTutupAlert');
+            iconContainer.className = 'mx-auto flex items-center justify-center h-14 w-14 rounded-full mb-4';
+            btnTutup.className = 'w-full px-4 py-2 rounded-lg font-semibold transition shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 text-white';
+            if (tipe === 'success') {
+                iconContainer.classList.add('bg-green-100', 'text-green-600');
+                iconContainer.innerHTML = '<i class="fas fa-check text-2xl"></i>';
+                btnTutup.classList.add('bg-green-600', 'hover:bg-green-700', 'focus:ring-green-500');
+            } else if (tipe === 'error') {
+                iconContainer.classList.add('bg-red-100', 'text-red-600');
+                iconContainer.innerHTML = '<i class="fas fa-times text-2xl"></i>';
+                btnTutup.classList.add('bg-red-600', 'hover:bg-red-700', 'focus:ring-red-500');
+            } else {
+                iconContainer.classList.add('bg-blue-100', 'text-blue-600');
+                iconContainer.innerHTML = '<i class="fas fa-info text-2xl"></i>';
+                btnTutup.classList.add('bg-blue-600', 'hover:bg-blue-700', 'focus:ring-blue-500');
+            }
+            document.getElementById('modalAlert').classList.remove('hidden');
+        }
+        function tutupModalAlert() {
+            document.getElementById('modalAlert').classList.add('hidden');
+        }
+
+        let formHapusYangAktif = null;
+        function bukaModalKonfirmasiHapus(namaAkun, formId) {
+            document.getElementById('namaAkunHapus').innerText = namaAkun;
+            formHapusYangAktif = document.getElementById(formId);
+            document.getElementById('modalKonfirmasiHapus').classList.remove('hidden');
+        }
+        function tutupModalKonfirmasiHapus() {
+            document.getElementById('modalKonfirmasiHapus').classList.add('hidden');
+            formHapusYangAktif = null;
+        }
+        function eksekusiHapus() {
+            if (formHapusYangAktif) {
+                formHapusYangAktif.submit();
             }
         }
         function bukaModalPassword() {
@@ -339,8 +410,8 @@
             })
             .then(function(data) {
                 if (data.status === 'success') {
-                    alert("Berhasil: " + data.pesan);
                     tutupModalPassword();
+                    tampilkanAlert("Berhasil!", data.pesan, "success");
                 } else {
                     tampilkanNotif(data.pesan, 'error');
                 }
