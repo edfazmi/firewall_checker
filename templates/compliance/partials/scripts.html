@@ -6,7 +6,6 @@
             if (counts[sev] !== undefined) counts[sev]++;
         });
 
-        // Membuat fungsi helper agar aman dari error null (TypeError)
         const updateCount = (id, val) => {
             const el = document.getElementById(id);
             if (el) el.innerText = val;

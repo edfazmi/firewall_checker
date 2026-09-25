@@ -45,7 +45,7 @@ class DeviceDeleteView(LoginRequiredMixin, DeleteView):
         return super().delete(request, *args, **kwargs)
 
 class SyncDeviceView(LoginRequiredMixin, View):
-    def get(self, request, pk):
+    def post(self, request, pk):
         device = get_object_or_404(Device, pk=pk)
         service = FortiGateAPIService(device=device, user=request.user)
         

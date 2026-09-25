@@ -35,7 +35,6 @@ class ComplianceScanner(BaseService):
             ('POL_NO_DESC', 'Policy without Description/Comment', 'Policy tidak memiliki komentar atau deskripsi.', 'LOW', 'Tambahkan komentar yang menjelaskan tujuan bisnis dari policy tersebut.'),
             ('INTF_DOWN', 'Interface Down', 'Interface dalam keadaan admin down.', 'INFO', 'Verifikasi apakah interface ini masih dibutuhkan.'),
             ('INTF_NO_IP', 'Interface Active Without IP', 'Interface berstatus UP namun tidak memiliki konfigurasi IP.', 'LOW', 'Berikan IP Address atau nonaktifkan interface jika tidak digunakan.'),
-            ('ROUTE_NO_DEFAULT', 'Missing Default Route', 'Tidak ada static route default (0.0.0.0/0) yang aktif.', 'MEDIUM', 'Pastikan firewall memiliki rute keluar (gateway) yang valid.'),
             ('ADDR_DUP_SUBNET', 'Duplicate Address Object', 'Terdapat objek address berbeda yang menunjuk ke subnet yang sama persis.', 'LOW', 'Gabungkan atau hapus objek address yang berulang.'),
             ('SVC_WIDE_PORT', 'Wide Port Range Service', 'Service membuka rentang port yang sangat besar (1-65535).', 'LOW', 'Persempit rentang port sesuai kebutuhan aplikasi.'),
             ('POL_NO_LOG', 'Logging Policy Disabled', 'Fitur pencatatan log pada policy tidak diaktifkan.', 'MEDIUM', 'Aktifkan Log Allowed Traffic, minimal untuk Security Events.')

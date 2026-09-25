@@ -2,6 +2,15 @@ from django.db import models
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
 from core.utils import encrypt_token, decrypt_token
+import ipaddress
+
+def validate_non_loopback(value):
+    try:
+        ip = ipaddress.ip_address(value)
+        if ip.is_loopback or ip.is_unspecified:
+            raise ValidationError('Alamat IP loopback tidak diizinkan.')
+    except ValueError:
+        raise ValidationError('Format alamat IP tidak valid.')
 
 class Device(models.Model):
     CONNECTION_STATUS_CHOICES = [
@@ -12,7 +21,7 @@ class Device(models.Model):
     ]
 
     name = models.CharField(max_length=100, unique=True)
-    ip_address = models.GenericIPAddressField()
+    ip_address = models.GenericIPAddressField(validators=[validate_non_loopback])
     port = models.PositiveIntegerField(default=443)
     api_token_encrypted = models.TextField()
     os_version = models.CharField(max_length=50, blank=True, null=True)

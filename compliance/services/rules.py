@@ -27,11 +27,6 @@ class RuleEngine:
         if intf.get('ip', '0.0.0.0 0.0.0.0') == '0.0.0.0 0.0.0.0' and status == 'up' and 'INTF_NO_IP' in self.active_rules:
             self._add_finding('INTF_NO_IP', f"Interface {intf_name}", intf)
 
-    def _rule_route_no_default(self, routes):
-        if not any(r.get('dst', '') == '0.0.0.0 0.0.0.0' and r.get('status', 'enable') == 'enable' for r in routes):
-            if 'ROUTE_NO_DEFAULT' in self.active_rules:
-                self._add_finding('ROUTE_NO_DEFAULT', "Static Route", {"message": "Tidak ada Default Route."})
-
     def _rule_addr_dup_subnet(self, addr, addr_name, subnet, subnets_seen):
         if subnet in subnets_seen and 'ADDR_DUP_SUBNET' in self.active_rules:
             self._add_finding('ADDR_DUP_SUBNET', f"Address {addr_name}", {"conflict_with": subnets_seen[subnet]})
@@ -236,7 +231,6 @@ class RuleEngine:
         parsed_policies = self._check_policies_and_relationships(policies, address_map)
         self._check_unused_policies(policies, policy_hits)
         self._check_interfaces(interfaces)
-        self._check_routing(routes)
         self._check_address_objects(addresses)
         self._check_service_objects(services)
         

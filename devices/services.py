@@ -1,12 +1,9 @@
 import requests
-import urllib3
 from typing import Dict, Any, Optional
 from django.utils import timezone
 from core.services import BaseService
 from core.exceptions import FirewallAPIError
 from devices.models import Device
-
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 class FortiGateAPIService(BaseService):
     def __init__(self, device: Device, user=None):

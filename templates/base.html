@@ -6,24 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Dashboard{% endblock %} - SIKAF PTBA</title>
 
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        brand: { 
-                            sidebar: '#0B1B3D', 
-                            active: '#1A56DB',
-                            yellow: '#FFC107'
-                        }
-                    }
-                }
-            }
-        }
-    </script>
+    <link rel="stylesheet" href="{% static 'css/tailwind.css' %}">
+    <script src="{% static 'js/chart.umd.js' %}"></script>
 
     <style>
         .no-scrollbar::-webkit-scrollbar { display: none; }
@@ -33,7 +17,8 @@
 <body class="bg-[#F8F9FB] text-gray-800 font-sans antialiased flex h-screen overflow-hidden relative">
 
     <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-3"></div>
-    <div id="sidebarOverlay" class="fixed inset-0 bg-black opacity-50 z-40 hidden md:hidden"></div>
+    <div id="sidebarOverlay" class="fixed inset-0 bg-black opacity-50 z-40 hidd
+    en md:hidden"></div>
 
     <!-- ================= SIDEBAR ================= -->
     <aside id="sidebar" class="fixed inset-y-0 left-0 z-50 w-64 bg-brand-sidebar text-white flex flex-col transform -translate-x-full md:relative md:translate-x-0 transition duration-200 ease-in-out shadow-xl z-50">

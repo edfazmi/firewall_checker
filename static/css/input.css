@@ -1,0 +1,12 @@
+@import "tailwindcss";
+
+@source "../../templates";
+
+@theme {
+    --color-brand-sidebar: #0B1B3D;
+    --color-brand-active: #1A56DB;
+    --color-brand-yellow: #FFC107;
+    --color-brand-blue: #28364B;
+    --color-brand-yellow: #FFC107;
+    --color-brand-yellow-hover: #E0A800;
+}

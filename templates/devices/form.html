@@ -1,4 +1,3 @@
-<!-- templates/devices/form.html -->
 {% extends 'base.html' %}
 
 {% block title %}{% if object %}Edit{% else %}Tambah{% endif %} Device{% endblock %}
@@ -15,8 +14,7 @@
 
     <form method="POST" class="space-y-6">
         {% csrf_token %}
-        
-        <!-- Field Nama -->
+
         <div>
             <label for="{{ form.name.id_for_label }}" class="block text-sm font-medium text-gray-700">Nama Perangkat</label>
             {{ form.name }}
@@ -27,7 +25,6 @@
         </div>
 
         <div class="grid grid-cols-2 gap-4">
-            <!-- Field IP Address -->
             <div>
                 <label for="{{ form.ip_address.id_for_label }}" class="block text-sm font-medium text-gray-700">IP Management</label>
                 {{ form.ip_address }}
@@ -37,7 +34,6 @@
                 {% endif %}
             </div>
 
-            <!-- Field Port -->
             <div>
                 <label for="{{ form.port.id_for_label }}" class="block text-sm font-medium text-gray-700">Port API (HTTPS)</label>
                 {{ form.port }}
@@ -48,7 +44,6 @@
             </div>
         </div>
 
-        <!-- Field API Token -->
         <div>
             <label for="{{ form.api_token.id_for_label }}" class="block text-sm font-medium text-gray-700">API Token</label>
             {{ form.api_token }}
@@ -63,7 +58,6 @@
             {% endif %}
         </div>
 
-        <!-- Tombol Aksi -->
         <div class="flex justify-end space-x-3 pt-4 border-t border-gray-100">
             <a href="{% url 'devices:list' %}" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors">
                 Batal
@@ -78,7 +72,6 @@
 
 {% block extra_js %}
 <script>
-    // Styling prosedural sederhana untuk menambahkan class Tailwind ke input form bawaan Django
     document.addEventListener("DOMContentLoaded", function() {
         const inputs = document.querySelectorAll('input[type="text"], input[type="url"], input[type="password"], input[type="number"]');
         for (let i = 0; i < inputs.length; i++) {
