@@ -1,3 +1,4 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -5,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kelola Akun</title>
     <link rel="stylesheet" href="{% static 'css/tailwind.css' %}">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'fontawesome/css/all.min.css' %}">
 </head>
 <body class="bg-gray-100 font-sans text-gray-800">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -159,7 +160,9 @@
         </div>
     </div>
 
-    <div id="modalTambah" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+    <div id="modalTambah"
+    class="fixed inset-0 hidden flex items-center justify-center z-50"
+    style="background-color: rgba(0, 0, 0, 0.5);">
         <div class="bg-white rounded-xl shadow-lg w-full max-w-2xl p-6 relative max-h-[90vh] overflow-y-auto">
             <h3 class="text-xl font-bold text-gray-800 mb-4 border-b pb-2">Tambah Akun Baru</h3>
             <form action="{% url 'tambah_akun' %}" method="POST" class="space-y-4">
