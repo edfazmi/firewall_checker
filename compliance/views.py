@@ -3,7 +3,7 @@ from urllib3.exceptions import InsecureRequestWarning
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Case, When, Value, IntegerField
+from django.db.models import Case, IntegerField, Value, When
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
@@ -11,15 +11,14 @@ from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import CreateView, DetailView, ListView, UpdateView
 
-from devices.models import Device
 from core.exceptions import BaseAppException
-from .models import ScanHistory, ComplianceRule
-from .services import ComplianceScanner
+from devices.models import Device
 from .forms import ComplianceRuleForm
+from .models import ComplianceRule, ScanHistory
+from .services import ComplianceScanner
 
-requests.packages.urllib3.disable_warnings(
-    category=InsecureRequestWarning
-)
+requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
+
 
 class ScanDeviceView(LoginRequiredMixin, View):
     def get(self, request, device_id):
@@ -39,6 +38,7 @@ class ScanDeviceView(LoginRequiredMixin, View):
             messages.error(request, f"Terjadi kesalahan sistem: {str(e)}")
             return redirect('devices:list')
 
+
 class ScanResultView(LoginRequiredMixin, DetailView):
     model = ScanHistory
     template_name = 'compliance/result.html'
@@ -57,16 +57,31 @@ class ScanResultView(LoginRequiredMixin, DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
-        context['findings'] = self.object.findings.select_related('rule').all().order_by('rule__severity')
-        
+        context['findings'] = (
+            self.object.findings
+            .select_related('rule')
+            .annotate(
+                severity_order=Case(
+                    When(rule__severity='CRITICAL', then=Value(5)),
+                    When(rule__severity='HIGH', then=Value(4)),
+                    When(rule__severity='MEDIUM', then=Value(3)),
+                    When(rule__severity='LOW', then=Value(2)),
+                    When(rule__severity='INFO', then=Value(1)),
+                    default=Value(0),
+                    output_field=IntegerField(),
+                )
+            )
+            .order_by('-severity_order')
+        )
+
         context['policy_risks'] = (
             self.object.policy_risks.all()
             .annotate(
                 severity_order=Case(
-                    When(severity='Critical', then=Value(4)),
-                    When(severity='High', then=Value(3)),
-                    When(severity='Medium', then=Value(2)),
-                    When(severity='Low', then=Value(1)),
+                    When(severity='CRITICAL', then=Value(4)),
+                    When(severity='HIGH', then=Value(3)),
+                    When(severity='MEDIUM', then=Value(2)),
+                    When(severity='LOW', then=Value(1)),
                     default=Value(0),
                     output_field=IntegerField(),
                 )
@@ -83,15 +98,31 @@ class ScanResultView(LoginRequiredMixin, DetailView):
         except Exception as e:
             context['deny_policies'] = []
             print(f"Gagal menarik deny policies: {e}")
-        # ---------------------------------------------------------
-        
+
         return context
+
 
 class RuleListView(LoginRequiredMixin, ListView):
     model = ComplianceRule
     template_name = 'compliance/rule_list.html'
     context_object_name = 'rules'
-    ordering = ['category', '-severity']
+
+    def get_queryset(self):
+        return (
+            ComplianceRule.objects
+            .annotate(
+                severity_order=Case(
+                    When(severity='CRITICAL', then=Value(5)),
+                    When(severity='HIGH', then=Value(4)),
+                    When(severity='MEDIUM', then=Value(3)),
+                    When(severity='LOW', then=Value(2)),
+                    When(severity='INFO', then=Value(1)),
+                    default=Value(0),
+                    output_field=IntegerField(),
+                )
+            )
+            .order_by('-severity_order')
+        )
 
 
 class RuleCreateView(LoginRequiredMixin, CreateView):
@@ -115,8 +146,8 @@ class RuleUpdateView(LoginRequiredMixin, UpdateView):
         messages.success(self.request, "Rule berhasil diperbarui.")
         return super().form_valid(form)
 
+
 class PolicyDetailAPI(LoginRequiredMixin, View):
-    """API dinamis untuk menarik seluruh detail 1 Policy langsung dari FortiGate."""
     def get(self, request, device_id, policy_id):
         try:
             device = Device.objects.get(id=device_id)
@@ -164,6 +195,7 @@ class PolicyDetailAPI(LoginRequiredMixin, View):
                 
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
+
 
 @csrf_exempt
 def hapus_hasil_scan_otomatis(request):
