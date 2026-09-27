@@ -135,10 +135,6 @@ class FortiGateAPIService(BaseService):
         res = self._make_request('firewall.service/custom')
         return res if isinstance(res, list) else [res] if res else []
 
-    def get_static_routes(self) -> list:
-        res = self._make_request('router/static')
-        return res if isinstance(res, list) else [res] if res else []
-
     def get_policy_monitor(self) -> list:
         res = self._make_request('firewall/policy', is_monitor=True)
         return res if isinstance(res, list) else [res] if res else []

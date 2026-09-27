@@ -30,3 +30,5 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         context['total_inactive_rules'] = ComplianceRule.objects.filter(is_active=False).count()
         
         return context
+
+    

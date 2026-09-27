@@ -143,9 +143,6 @@ class RuleEngine:
             self._rule_intf_down(intf, intf_name, status)
             self._rule_intf_no_ip(intf, intf_name, status)
 
-    def _check_routing(self, routes: List[Dict[str, Any]]):
-        self._rule_route_no_default(routes)
-
     def _check_address_objects(self, addresses: List[Dict[str, Any]]):
         subnets_seen = {}
         for addr in addresses:
@@ -225,7 +222,7 @@ class RuleEngine:
                         
         return parsed_policies
         
-    def run_all_checks(self, policies, interfaces, routes, addresses, services, policy_hits) -> Tuple[List[Finding], List[Dict]]:
+    def run_all_checks(self, policies, interfaces, addresses, services, policy_hits) -> Tuple[List[Finding], List[Dict]]:
         address_map = network_utils.build_address_map(addresses)
 
         parsed_policies = self._check_policies_and_relationships(policies, address_map)

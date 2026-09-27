@@ -45,3 +45,7 @@ def decrypt_token(encrypted_token: str) -> str:
     except Exception as e:
         logger.error(f"Error tidak terduga saat mendekripsi token: {e}")
         raise EncryptionError("Gagal membaca pengamanan data sistem.")
+
+
+
+    

@@ -114,14 +114,13 @@ class ComplianceScanner(BaseService):
         try:
             policies = self.api_service.get_firewall_policies()
             interfaces = self.api_service.get_interfaces()
-            routes = self.api_service.get_static_routes()
             addresses = self.api_service.get_address_objects()
             services = self.api_service.get_service_objects()
             policy_hits = self.api_service.get_policy_monitor()
 
             rule_engine = RuleEngine(self.scan_record, self.active_rules)
             findings, parsed_policies = rule_engine.run_all_checks(
-                policies, interfaces, routes, addresses, services, policy_hits
+                policies, interfaces, addresses, services, policy_hits
             )
             self.findings_to_create.extend(findings)
 
