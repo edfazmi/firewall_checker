@@ -17,11 +17,9 @@
 <body class="bg-[#F8F9FB] text-gray-800 font-sans antialiased flex h-screen overflow-hidden relative">
 
     <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-3"></div>
-    <div id="sidebarOverlay" class="fixed inset-0 bg-black opacity-50 z-40 hidd
-    en md:hidden"></div>
+    <div id="sidebarOverlay" class="fixed inset-0 bg-black opacity-50 z-40 hidden md:hidden"></div>
 
-    <!-- ================= SIDEBAR ================= -->
-    <aside id="sidebar" class="fixed inset-y-0 left-0 z-50 w-64 bg-brand-sidebar text-white flex flex-col transform -translate-x-full md:relative md:translate-x-0 transition duration-200 ease-in-out shadow-xl z-50">
+    <aside id="sidebar" class="fixed inset-y-0 left-0 w-64 bg-brand-sidebar text-white flex flex-col transform -translate-x-full md:relative md:translate-x-0 transition duration-200 ease-in-out shadow-xl z-50">
 
         <div class="h-20 flex items-center justify-center border-b border-[#1A2E5E] relative overflow-hidden">
             <img src="{% static 'images/logo2-ptba.png' %}" alt="Logo PTBA" class="absolute top-3 left-1/2 transform -translate-x-1/2 w-[85%] pointer-events-none">
@@ -79,8 +77,7 @@
         </div>
     </aside>
 
-    <!-- ================= MAIN CONTENT ================= -->
-    <main class="flex-1 flex flex-col h-screen overflow-hidden relative">
+    <main class="flex-1 min-w-0 flex flex-col h-screen overflow-hidden relative">
 
         <header class="h-20 bg-white border-b border-gray-200 flex items-center justify-between px-6 md:px-10 z-10 w-full shadow-sm">
 
