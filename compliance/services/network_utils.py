@@ -1,164 +1,258 @@
 import ipaddress
-from typing import List, Dict, Any, Set
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
 
-def build_address_map(addresses: List[Dict[str, Any]]) -> Dict[str, Any]:
-    address_map: Dict[str, Any] = {}
+Relation = str
+
+EXACT = "EXACT"
+SUPERSET = "SUPERSET"
+SUBSET = "SUBSET"
+OVERLAP = "OVERLAP"
+INCOMPARABLE = "INCOMPARABLE"
+NONE = "NONE"
+
+VALID_RELATIONS = {EXACT, SUPERSET, SUBSET, OVERLAP, INCOMPARABLE, NONE}
+
+Network = ipaddress.IPv4Network
+
+
+def _clean_name(value: Any) -> str:
+    return str(value).strip() if value is not None else ""
+
+
+def build_address_map(addresses: List[Dict[str, Any]]) -> Dict[str, Optional[Network]]:
+    address_map: Dict[str, Optional[Network]] = {}
+
     if not isinstance(addresses, list):
         return address_map
+
     for addr in addresses:
         if not isinstance(addr, dict):
             continue
-        name = str(addr.get("name", "")).strip()
+
+        name = _clean_name(addr.get("name"))
         if not name:
             continue
-        obj_type = str(addr.get("type", "ipmask")).strip().lower()
-        subnet_str = str(addr.get("subnet", "0.0.0.0 0.0.0.0")).strip()
+
+        obj_type = _clean_name(addr.get("type", "ipmask")).lower()
         if obj_type != "ipmask":
             address_map[name] = None
             continue
+
+        subnet_value = addr.get("subnet", "0.0.0.0 0.0.0.0")
+        parts = str(subnet_value).strip().split()
+        if len(parts) != 2:
+            address_map[name] = None
+            continue
+
         try:
-            parts = subnet_str.split()
-            if len(parts) != 2:
-                address_map[name] = None
-                continue
-            ip = parts[0]
-            mask = parts[1]
-            network = ipaddress.IPv4Network(f"{ip}/{mask}", strict=False)
-            address_map[name] = network
+            address_map[name] = ipaddress.IPv4Network(
+                f"{parts[0]}/{parts[1]}",
+                strict=False,
+            )
         except (ValueError, TypeError):
             address_map[name] = None
+
     return address_map
 
-def get_networks_from_names(names_list: List[str], address_map: Dict[str, Any]) -> List[ipaddress.IPv4Network]:
-    networks: List[ipaddress.IPv4Network] = []
-    if not isinstance(names_list, (list, tuple, set)):
-        return networks
+
+def get_networks_from_names(
+    names_list: Iterable[str],
+    address_map: Dict[str, Optional[Network]],
+) -> List[Network]:
     if not isinstance(address_map, dict):
-        return networks
+        return []
+
+    if not isinstance(names_list, (list, tuple, set)):
+        return []
+
+    networks: List[Network] = []
+    seen: Set[Network] = set()
+    all_network = ipaddress.IPv4Network("0.0.0.0/0")
+
     for name in names_list:
-        if name is None:
-            continue
-        clean_name = str(name).strip()
+        clean_name = _clean_name(name)
         if not clean_name:
             continue
+
         if clean_name.lower() == "all":
-            networks.append(ipaddress.IPv4Network("0.0.0.0/0"))
+            if all_network not in seen:
+                networks.append(all_network)
+                seen.add(all_network)
             continue
+
         network = address_map.get(clean_name)
-        if network is None:
-            continue
-        if isinstance(network, ipaddress.IPv4Network):
+        if isinstance(network, ipaddress.IPv4Network) and network not in seen:
             networks.append(network)
+            seen.add(network)
+
     return networks
 
-def compare_networks(nets_a: List[ipaddress.IPv4Network], nets_b: List[ipaddress.IPv4Network]) -> str:
-    if not nets_a or not nets_b:
-        return "NONE"
-    a_super_b = True
-    for net_b in nets_b:
-        covered_by_a = False
-        for net_a in nets_a:
-            try:
-                if net_b.subnet_of(net_a):
-                    covered_by_a = True
-                    break
-            except (TypeError, ValueError):
-                continue
-        if not covered_by_a:
-            a_super_b = False
-            break
-    b_super_a = True
-    for net_a in nets_a:
-        covered_by_b = False
-        for net_b in nets_b:
-            try:
-                if net_a.subnet_of(net_b):
-                    covered_by_b = True
-                    break
-            except (TypeError, ValueError):
-                continue
-        if not covered_by_b:
-            b_super_a = False
-            break
-    if a_super_b and b_super_a:
-        return "EXACT"
-    if a_super_b:
-        return "SUPERSET"
-    if b_super_a:
-        return "SUBSET"
-    for net_a in nets_a:
-        for net_b in nets_b:
-            try:
-                if net_a.overlaps(net_b):
-                    return "OVERLAP"
-            except (TypeError, ValueError):
-                continue
-    return "NONE"
 
-def compare_sets(set_a: set, set_b: set, univ_kw: str = "any") -> str:
-    if not isinstance(set_a, (set, list, tuple)):
-        return "NONE"
-    if not isinstance(set_b, (set, list, tuple)):
-        return "NONE"
-    normalized_a: Set[str] = {str(value).strip() for value in set_a if value is not None and str(value).strip()}
-    normalized_b: Set[str] = {str(value).strip() for value in set_b if value is not None and str(value).strip()}
-    if not normalized_a or not normalized_b:
-        return "NONE"
-    universal = str(univ_kw).strip().lower()
-    has_univ_a = any(value.lower() == universal for value in normalized_a)
-    has_univ_b = any(value.lower() == universal for value in normalized_b)
-    if has_univ_a and has_univ_b:
-        return "EXACT"
-    if has_univ_a:
-        return "SUPERSET"
-    if has_univ_b:
-        return "SUBSET"
-    a_sup_b = normalized_b.issubset(normalized_a)
-    b_sup_a = normalized_a.issubset(normalized_b)
-    if a_sup_b and b_sup_a:
-        return "EXACT"
-    if a_sup_b:
-        return "SUPERSET"
-    if b_sup_a:
-        return "SUBSET"
-    if normalized_a.intersection(normalized_b):
-        return "OVERLAP"
-    return "NONE"
+def normalize_networks(networks: Iterable[Network]) -> List[Network]:
+    if not isinstance(networks, (list, tuple, set)):
+        return []
 
-def combine_relations(rels: List[str]) -> str:
-    if not isinstance(rels, (list, tuple)):
-        return "NONE"
-    normalized_rels = []
-    valid_relations = {"EXACT", "SUPERSET", "SUBSET", "OVERLAP", "NONE"}
-    for rel in rels:
-        if rel is None:
-            return "NONE"
-        relation = str(rel).strip().upper()
-        if relation not in valid_relations:
-            return "NONE"
-        normalized_rels.append(relation)
-    if not normalized_rels:
-        return "NONE"
-    if "NONE" in normalized_rels:
-        return "NONE"
-    if all(rel == "EXACT" for rel in normalized_rels):
-        return "EXACT"
-    if all(rel in {"EXACT", "SUPERSET"} for rel in normalized_rels):
-        return "SUPERSET"
-    if all(rel in {"EXACT", "SUBSET"} for rel in normalized_rels):
-        return "SUBSET"
-    return "OVERLAP"
+    valid = [
+        net for net in networks
+        if isinstance(net, ipaddress.IPv4Network)
+    ]
 
-def extract_names(data) -> set:
-    if not data:
+    if not valid:
+        return []
+
+    return list(ipaddress.collapse_addresses(valid))
+
+
+def _covers_all(source: List[Network], targets: List[Network]) -> bool:
+    if not source or not targets:
+        return False
+
+    for target in targets:
+        if not any(target.subnet_of(candidate) for candidate in source):
+            return False
+    return True
+
+
+def networks_intersect(nets_a: List[Network], nets_b: List[Network]) -> bool:
+    a = normalize_networks(nets_a)
+    b = normalize_networks(nets_b)
+
+    if not a or not b:
+        return False
+
+    for net_a in a:
+        for net_b in b:
+            if net_a.overlaps(net_b):
+                return True
+    return False
+
+
+def compare_networks(nets_a: List[Network], nets_b: List[Network]) -> Relation:
+    a = normalize_networks(nets_a)
+    b = normalize_networks(nets_b)
+
+    if not a or not b:
+        return NONE
+
+    a_covers_b = _covers_all(a, b)
+    b_covers_a = _covers_all(b, a)
+
+    if a_covers_b and b_covers_a:
+        return EXACT
+    if a_covers_b:
+        return SUPERSET
+    if b_covers_a:
+        return SUBSET
+    if networks_intersect(a, b):
+        return OVERLAP
+    return NONE
+
+
+def normalize_names(values: Iterable[Any]) -> Set[str]:
+    if not isinstance(values, (set, list, tuple)):
         return set()
+    return {
+        str(value).strip()
+        for value in values
+        if value is not None and str(value).strip()
+    }
+
+
+def _has_universal(values: Set[str], universal: str) -> bool:
+    return universal in {value.lower() for value in values}
+
+
+def sets_intersect(
+    set_a: Iterable[str],
+    set_b: Iterable[str],
+    univ_kw: str = "any",
+) -> bool:
+    a = normalize_names(set_a)
+    b = normalize_names(set_b)
+    if not a or not b:
+        return False
+
+    universal = _clean_name(univ_kw).lower()
+    if _has_universal(a, universal) or _has_universal(b, universal):
+        return True
+
+    return bool({value.lower() for value in a}.intersection(value.lower() for value in b))
+
+
+def compare_sets(
+    set_a: Iterable[str],
+    set_b: Iterable[str],
+    univ_kw: str = "any",
+) -> Relation:
+    a = normalize_names(set_a)
+    b = normalize_names(set_b)
+
+    if not a or not b:
+        return NONE
+
+    universal = _clean_name(univ_kw).lower()
+    has_univ_a = _has_universal(a, universal)
+    has_univ_b = _has_universal(b, universal)
+
+    if has_univ_a and has_univ_b:
+        return EXACT
+    if has_univ_a:
+        return SUPERSET
+    if has_univ_b:
+        return SUBSET
+
+    a_lower = {value.lower() for value in a}
+    b_lower = {value.lower() for value in b}
+
+    a_covers_b = b_lower.issubset(a_lower)
+    b_covers_a = a_lower.issubset(b_lower)
+
+    if a_covers_b and b_covers_a:
+        return EXACT
+    if a_covers_b:
+        return SUPERSET
+    if b_covers_a:
+        return SUBSET
+    if a_lower.intersection(b_lower):
+        return OVERLAP
+    return NONE
+
+
+def combine_relations(rels: List[Relation]) -> Relation:
+    if not isinstance(rels, (list, tuple)) or not rels:
+        return NONE
+
+    normalized: List[Relation] = []
+    for rel in rels:
+        relation = _clean_name(rel).upper()
+        if relation not in VALID_RELATIONS:
+            return NONE
+        normalized.append(relation)
+
+    if NONE in normalized:
+        return NONE
+    if all(rel == EXACT for rel in normalized):
+        return EXACT
+    if all(rel in {EXACT, SUPERSET} for rel in normalized):
+        return SUPERSET
+    if all(rel in {EXACT, SUBSET} for rel in normalized):
+        return SUBSET
+
+    if OVERLAP in normalized:
+        return OVERLAP
+
+    return INCOMPARABLE
+
+
+def extract_names(data: Any) -> Set[str]:
     if not isinstance(data, list):
         return set()
-    names = set()
+
+    names: Set[str] = set()
     for item in data:
         if not isinstance(item, dict):
             continue
-        name = str(item.get("name", "")).strip()
+        name = _clean_name(item.get("name"))
         if name:
             names.add(name)
     return names

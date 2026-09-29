@@ -1,234 +1,650 @@
-from typing import List, Dict, Any, Tuple
+import ipaddress
+from typing import Any, Dict, List, Optional, Tuple
+
 from compliance.models import Finding
 from . import network_utils
+
 
 class RuleEngine:
     def __init__(self, scan_record, active_rules: Dict[str, Any]):
         self.scan_record = scan_record
-        self.active_rules = active_rules
-        self.findings_to_create = []
+        self.active_rules = active_rules or {}
+        self.findings_to_create: List[Finding] = []
 
-    def _add_finding(self, rule_code: str, element_name: str, details: dict):
+    def _add_finding(self, rule_code: str, element_name: str, details: Dict[str, Any]):
         rule = self.active_rules.get(rule_code)
-        if not rule: return
+        if not rule:
+            return
+
         self.findings_to_create.append(
-            Finding(scan=self.scan_record, rule=rule, element_name=element_name, element_details=details)
+            Finding(
+                scan=self.scan_record,
+                rule=rule,
+                element_name=element_name,
+                element_details=details,
+            )
         )
 
-    # -------------------------------------------------------------------------
-    # RULE LOGIC FUNCTIONS
-    # -------------------------------------------------------------------------
+    def _rule_intf_down(self, intf: Dict[str, Any], intf_name: str, status: str):
+        if status == "down" and "INTF_DOWN" in self.active_rules:
+            self._add_finding("INTF_DOWN", f"Interface {intf_name}", intf)
 
-    def _rule_intf_down(self, intf, intf_name, status):
-        if status == 'down' and 'INTF_DOWN' in self.active_rules:
-            self._add_finding('INTF_DOWN', f"Interface {intf_name}", intf)
+    def _rule_intf_no_ip(self, intf: Dict[str, Any], intf_name: str, status: str):
+        ip_value = str(intf.get("ip", "0.0.0.0 0.0.0.0")).strip()
+        if (
+            status == "up"
+            and ip_value == "0.0.0.0 0.0.0.0"
+            and "INTF_NO_IP" in self.active_rules
+        ):
+            self._add_finding("INTF_NO_IP", f"Interface {intf_name}", intf)
 
-    def _rule_intf_no_ip(self, intf, intf_name, status):
-        if intf.get('ip', '0.0.0.0 0.0.0.0') == '0.0.0.0 0.0.0.0' and status == 'up' and 'INTF_NO_IP' in self.active_rules:
-            self._add_finding('INTF_NO_IP', f"Interface {intf_name}", intf)
-
-    def _rule_addr_dup_subnet(self, addr, addr_name, subnet, subnets_seen):
-        if subnet in subnets_seen and 'ADDR_DUP_SUBNET' in self.active_rules:
-            self._add_finding('ADDR_DUP_SUBNET', f"Address {addr_name}", {"conflict_with": subnets_seen[subnet]})
+    def _rule_addr_dup_subnet(
+        self,
+        addr: Dict[str, Any],
+        addr_name: str,
+        subnet_key: str,
+        subnets_seen: Dict[str, str],
+    ):
+        if subnet_key in subnets_seen and "ADDR_DUP_SUBNET" in self.active_rules:
+            self._add_finding(
+                "ADDR_DUP_SUBNET",
+                f"Address {addr_name}",
+                {
+                    "conflict_with": subnets_seen[subnet_key],
+                    "subnet": subnet_key,
+                },
+            )
         else:
-            subnets_seen[subnet] = addr_name
+            subnets_seen[subnet_key] = addr_name
 
-    def _rule_svc_wide_port(self, svc, svc_name):
-        if svc.get('tcp-portrange', '') == '1-65535' or svc.get('udp-portrange', '') == '1-65535':
-            if 'SVC_WIDE_PORT' in self.active_rules:
-                self._add_finding('SVC_WIDE_PORT', f"Service {svc_name}", svc)
+    def _rule_svc_wide_port(self, svc: Dict[str, Any], svc_name: str):
+        tcp = str(svc.get("tcp-portrange", "")).strip().replace(" ", "")
+        udp = str(svc.get("udp-portrange", "")).strip().replace(" ", "")
 
-    def _rule_pol_no_desc(self, pol, target_name):
-        if not pol.get('comments') and 'POL_NO_DESC' in self.active_rules:
-            self._add_finding('POL_NO_DESC', target_name, pol)
+        if (tcp == "1-65535" or udp == "1-65535") and "SVC_WIDE_PORT" in self.active_rules:
+            self._add_finding("SVC_WIDE_PORT", f"Service {svc_name}", svc)
 
-    def _rule_pol_overly_permissive(self, action, src_addrs_str, dst_addrs_str, target_name):
-        if action == 'accept' and 'POL_OVERLY_PERMISSIVE' in self.active_rules:
-            has_any_src = any(addr.lower() == 'all' for addr in src_addrs_str)
-            has_any_dst = any(addr.lower() == 'all' for addr in dst_addrs_str)
-            if has_any_src or has_any_dst:
-                self._add_finding('POL_OVERLY_PERMISSIVE', target_name, {
-                    "message": "Policy mengizinkan trafik dengan cakupan Source atau Destination sangat luas (ANY/ALL)."
-                })
+    def _rule_pol_no_desc(self, pol: Dict[str, Any], target_name: str):
+        comments = str(pol.get("comments", "")).strip()
+        if not comments and "POL_NO_DESC" in self.active_rules:
+            self._add_finding("POL_NO_DESC", target_name, pol)
 
-    def _rule_pol_any_intf(self, action, src_intf_set, dst_intf_set, target_name):
-        if action == 'accept' and 'POL_ANY_INTF' in self.active_rules:
-            has_any_src = any(intf.lower() == 'any' for intf in src_intf_set)
-            has_any_dst = any(intf.lower() == 'any' for intf in dst_intf_set)
-            if has_any_src or has_any_dst:
-                self._add_finding('POL_ANY_INTF', target_name, {
-                    "message": "Policy mengizinkan trafik dengan Incoming atau Outgoing interface sangat luas (ANY)."
-                })
+    def _rule_pol_overly_permissive(
+        self,
+        action: str,
+        src_addrs: set,
+        dst_addrs: set,
+        target_name: str,
+    ):
+        if action != "accept" or "POL_OVERLY_PERMISSIVE" not in self.active_rules:
+            return
 
-    def _rule_pol_any_svc(self, action, services_set, target_name):
-        if action == 'accept' and 'POL_ANY_SVC' in self.active_rules:
-            has_all_svc = any(svc.lower() == 'all' for svc in services_set)
-            if has_all_svc:
-                self._add_finding('POL_ANY_SVC', target_name, {
-                    "message": "Policy mengizinkan trafik dengan cakupan Service terbuka untuk semua (ALL)."
-                })
+        has_any_src = any(str(addr).strip().lower() == "all" for addr in src_addrs)
+        has_any_dst = any(str(addr).strip().lower() == "all" for addr in dst_addrs)
 
-    def _rule_pol_unused(self, pol, pol_id, hit_dict):
-        if 'POL_UNUSED' not in self.active_rules: return
-        if str(pol.get('status', 'enable')).strip().lower() == 'disable': return
-        
-        hit_data = hit_dict.get(pol_id, {})
-        hit_count = hit_data.get('hit_count', hit_data.get('packets', 0))
+        if has_any_src or has_any_dst:
+            self._add_finding(
+                "POL_OVERLY_PERMISSIVE",
+                target_name,
+                {
+                    "message": (
+                        "Policy mengizinkan trafik dengan cakupan Source atau "
+                        "Destination sangat luas (ANY/ALL)."
+                    )
+                },
+            )
+
+    def _rule_pol_any_intf(
+        self,
+        action: str,
+        src_intf_set: set,
+        dst_intf_set: set,
+        target_name: str,
+    ):
+        if action != "accept" or "POL_ANY_INTF" not in self.active_rules:
+            return
+
+        has_any_src = any(str(intf).strip().lower() == "any" for intf in src_intf_set)
+        has_any_dst = any(str(intf).strip().lower() == "any" for intf in dst_intf_set)
+
+        if has_any_src or has_any_dst:
+            self._add_finding(
+                "POL_ANY_INTF",
+                target_name,
+                {
+                    "message": (
+                        "Policy mengizinkan trafik dengan cakupan Incoming atau "
+                        "Outgoing interface sangat luas (ANY)."
+                    )
+                },
+            )
+
+    def _rule_pol_any_svc(self, action: str, services_set: set, target_name: str):
+        if action != "accept" or "POL_ANY_SVC" not in self.active_rules:
+            return
+
+        has_all_service = any(
+            str(service).strip().lower() == "all" for service in services_set
+        )
+
+        if has_all_service:
+            self._add_finding(
+                "POL_ANY_SVC",
+                target_name,
+                {
+                    "message": (
+                        "Policy mengizinkan trafik dengan cakupan Service "
+                        "terbuka untuk semua (ALL)."
+                    )
+                },
+            )
+
+    def _rule_pol_unused(
+        self,
+        pol: Dict[str, Any],
+        pol_id: str,
+        hit_dict: Dict[str, Dict[str, Any]],
+    ):
+        if "POL_UNUSED" not in self.active_rules:
+            return
+
+        if str(pol.get("status", "enable")).strip().lower() == "disable":
+            return
+
+        hit_data = hit_dict.get(pol_id, {}) or {}
+        raw_hits = hit_data.get("hit_count", hit_data.get("packets", 0))
+
+        try:
+            hit_count = int(raw_hits or 0)
+        except (TypeError, ValueError):
+            hit_count = 0
+
         if hit_count == 0:
-            self._add_finding('POL_UNUSED', f"Policy ID {pol_id} ({pol.get('name', '')})", {
-                "message": "Policy aktif namun 0 hits.", "hit_count": 0, "last_used": hit_data.get('last_used', 'N/A')
-            })
+            self._add_finding(
+                "POL_UNUSED",
+                f"Policy ID {pol_id} ({pol.get('name', '')})",
+                {
+                    "message": "Policy aktif namun 0 hits.",
+                    "hit_count": 0,
+                    "last_used": hit_data.get("last_used", "N/A"),
+                },
+            )
 
-    def _rule_pol_no_log(self, pol, target_name):
-        if 'POL_NO_LOG' in self.active_rules:
-            log_status = str(pol.get('logtraffic', 'disable')).strip().lower()
-            
-            if log_status in ['disable', '', 'none', 'false', 'disabled']:
-                self._add_finding('POL_NO_LOG', target_name, {
+    def _rule_pol_no_log(self, pol: Dict[str, Any], target_name: str):
+        if "POL_NO_LOG" not in self.active_rules:
+            return
+
+        log_status = str(pol.get("logtraffic", "disable")).strip().lower()
+        if log_status in {"disable", "", "none", "false", "disabled"}:
+            self._add_finding(
+                "POL_NO_LOG",
+                target_name,
+                {
                     "message": "Fitur logging dimatikan pada policy ini.",
-                    "logtraffic_value": log_status
-                })
+                    "logtraffic_value": log_status,
+                },
+            )
 
-    def _rule_pol_duplicate(self, pol_a, pol_b, action_a, action_b, combined_rel, target_b_name, info_json):
-        if combined_rel == 'EXACT' and action_a == action_b and 'POL_DUPLICATE' in self.active_rules:
-            info_json["message"] = "Duplikasi identik terdeteksi."
-            info_json["related_policy_id"] = pol_a['id']
-            info_json["related_policy_name"] = pol_a['name']
-            self._add_finding('POL_DUPLICATE', target_b_name, info_json)
+    @staticmethod
+    def _relation_details(
+        rel_src_intf: str,
+        rel_dst_intf: str,
+        rel_svc: str,
+        rel_src_net: str,
+        rel_dst_net: str,
+        combined_rel: str,
+    ) -> Dict[str, Any]:
+        return {
+            "relationship": combined_rel,
+            "source_interface": rel_src_intf,
+            "destination_interface": rel_dst_intf,
+            "service": rel_svc,
+            "source_network": rel_src_net,
+            "destination_network": rel_dst_net,
+        }
 
-    def _rule_pol_shadowed(self, pol_a, pol_b, action_a, action_b, combined_rel, target_b_name, info_json):
-        if 'POL_SHADOWED' not in self.active_rules: return
-        
-        if combined_rel == 'EXACT' and action_a != action_b:
-            info_json["message"] = f"Shadowed secara penuh! Action bertentangan dengan Policy ID {pol_a['id']}."
-            info_json["related_policy_id"] = pol_a['id']
-            info_json["related_policy_name"] = pol_a['name']
-            self._add_finding('POL_SHADOWED', target_b_name, info_json)
-        elif combined_rel == 'SUPERSET' and action_a != action_b:
-            info_json["message"] = f"Shadowed. Policy tertimpa oleh Policy luas (ID {pol_a['id']}) di atasnya."
-            info_json["related_policy_id"] = pol_a['id']
-            info_json["related_policy_name"] = pol_a['name']
-            self._add_finding('POL_SHADOWED', target_b_name, info_json)
+    def _rule_pol_duplicate(
+        self,
+        pol_a: Dict[str, Any],
+        action_a: str,
+        action_b: str,
+        combined_rel: str,
+        target_b_name: str,
+        info_json: Dict[str, Any],
+    ):
+        if (
+            combined_rel == "EXACT"
+            and action_a == action_b
+            and "POL_DUPLICATE" in self.active_rules
+        ):
+            details = dict(info_json)
+            details.update(
+                {
+                    "message": "Duplikasi identik terdeteksi.",
+                    "related_policy_id": pol_a["id"],
+                    "related_policy_name": pol_a["name"],
+                }
+            )
+            self._add_finding("POL_DUPLICATE", target_b_name, details)
 
-    def _rule_pol_redundant(self, pol_a, pol_b, action_a, action_b, combined_rel, target_a_name, target_b_name, info_json):
-        if 'POL_REDUNDANT' not in self.active_rules: return
-        
-        if combined_rel == 'SUPERSET' and action_a == action_b:
-            info_json["message"] = f"Redundant. Traffic dicakup penuh oleh Policy ID {pol_a['id']} yang lebih luas."
-            info_json["related_policy_id"] = pol_a['id']
-            info_json["related_policy_name"] = pol_a['name']
-            self._add_finding('POL_REDUNDANT', target_b_name, info_json)
-        elif combined_rel == 'SUBSET' and action_a == action_b:
-            info_json["message"] = f"Redundant. Action sama dengan Policy general ID {pol_b['id']} di bawahnya."
-            info_json["related_policy_id"] = pol_b['id']
-            info_json["related_policy_name"] = pol_b['name']
-            self._add_finding('POL_REDUNDANT', target_a_name, info_json)
+    def _rule_pol_shadowed(
+        self,
+        pol_a: Dict[str, Any],
+        action_a: str,
+        action_b: str,
+        combined_rel: str,
+        target_b_name: str,
+        info_json: Dict[str, Any],
+    ):
+        if "POL_SHADOWED" not in self.active_rules or action_a == action_b:
+            return
 
-    def _rule_pol_conflict(self, pol_a, pol_b, action_a, action_b, combined_rel, target_b_name, info_json):
-        if combined_rel == 'OVERLAP' and action_a != action_b and 'POL_CONFLICT' in self.active_rules:
-            info_json["message"] = f"Partial Conflict. Sebagian IP range bentrok dengan Policy ID {pol_a['id']}."
-            info_json["related_policy_id"] = pol_a['id']
-            info_json["related_policy_name"] = pol_a['name']
-            self._add_finding('POL_CONFLICT', target_b_name, info_json)
+        if combined_rel == "EXACT":
+            message = (
+                f"Shadowed secara penuh. Policy sebelumnya (ID {pol_a['id']}) "
+                "memiliki cakupan identik dengan action berbeda."
+            )
+        elif combined_rel == "SUPERSET":
+            message = (
+                f"Shadowed. Policy sebelumnya (ID {pol_a['id']}) memiliki "
+                "cakupan yang lebih luas dengan action berbeda."
+            )
+        else:
+            return
 
+        details = dict(info_json)
+        details.update(
+            {
+                "message": message,
+                "related_policy_id": pol_a["id"],
+                "related_policy_name": pol_a["name"],
+            }
+        )
+        self._add_finding("POL_SHADOWED", target_b_name, details)
 
-    # -------------------------------------------------------------------------
-    # RUNNER FUNCTIONS (Iterators)
-    # -------------------------------------------------------------------------
+    def _rule_pol_redundant(
+        self,
+        pol_a: Dict[str, Any],
+        pol_b: Dict[str, Any],
+        action_a: str,
+        action_b: str,
+        combined_rel: str,
+        target_a_name: str,
+        target_b_name: str,
+        info_json: Dict[str, Any],
+    ):
+        if "POL_REDUNDANT" not in self.active_rules or action_a != action_b:
+            return
+
+        if combined_rel == "SUPERSET":
+            details = dict(info_json)
+            details.update(
+                {
+                    "message": (
+                        f"Redundant. Traffic Policy B dicakup penuh oleh "
+                        f"Policy ID {pol_a['id']} yang lebih luas."
+                    ),
+                    "related_policy_id": pol_a["id"],
+                    "related_policy_name": pol_a["name"],
+                }
+            )
+            self._add_finding("POL_REDUNDANT", target_b_name, details)
+
+        elif combined_rel == "SUBSET":
+            details = dict(info_json)
+            details.update(
+                {
+                    "message": (
+                        f"Redundant. Policy A memiliki cakupan lebih sempit "
+                        f"dengan action yang sama seperti Policy ID {pol_b['id']}."
+                    ),
+                    "related_policy_id": pol_b["id"],
+                    "related_policy_name": pol_b["name"],
+                }
+            )
+            self._add_finding("POL_REDUNDANT", target_a_name, details)
+
+    def _rule_pol_conflict(
+        self,
+        pol_a: Dict[str, Any],
+        action_a: str,
+        action_b: str,
+        combined_rel: str,
+        target_b_name: str,
+        info_json: Dict[str, Any],
+    ):
+        if (
+            combined_rel not in {"OVERLAP", "INCOMPARABLE"}
+            or action_a == action_b
+            or "POL_CONFLICT" not in self.active_rules
+        ):
+            return
+
+        details = dict(info_json)
+        details.update(
+            {
+                "message": (
+                    f"Policy memiliki cakupan trafik yang beririsan dengan "
+                    f"action berbeda dari Policy ID {pol_a['id']}."
+                ),
+                "related_policy_id": pol_a["id"],
+                "related_policy_name": pol_a["name"],
+            }
+        )
+        self._add_finding("POL_CONFLICT", target_b_name, details)
 
     def _check_interfaces(self, interfaces: List[Dict[str, Any]]):
+        if not isinstance(interfaces, list):
+            return
+
         for intf in interfaces:
-            intf_name = intf.get('name', 'Unknown')
-            status = intf.get('status', 'down')
+            if not isinstance(intf, dict):
+                continue
+
+            intf_name = str(intf.get("name", "Unknown")).strip() or "Unknown"
+            status = str(intf.get("status", "")).strip().lower()
+            if not status:
+                status = str(intf.get("link", "down")).strip().lower()
+            if status not in {"up", "down"}:
+                status = "down"
+
             self._rule_intf_down(intf, intf_name, status)
             self._rule_intf_no_ip(intf, intf_name, status)
 
     def _check_address_objects(self, addresses: List[Dict[str, Any]]):
-        subnets_seen = {}
+        if not isinstance(addresses, list):
+            return
+
+        subnets_seen: Dict[str, str] = {}
+
         for addr in addresses:
-            subnet = addr.get('subnet', '')
-            addr_name = addr.get('name', '')
-            if addr.get('type', '') == 'ipmask' and subnet != '0.0.0.0 0.0.0.0':
-                self._rule_addr_dup_subnet(addr, addr_name, subnet, subnets_seen)
+            if not isinstance(addr, dict):
+                continue
+
+            if str(addr.get("type", "")).strip().lower() != "ipmask":
+                continue
+
+            raw_subnet = str(addr.get("subnet", "")).strip()
+            if not raw_subnet or raw_subnet == "0.0.0.0 0.0.0.0":
+                continue
+
+            parts = raw_subnet.split()
+            if len(parts) != 2:
+                continue
+
+            try:
+                network = ipaddress.IPv4Network(
+                    f"{parts[0]}/{parts[1]}",
+                    strict=False,
+                )
+            except (ValueError, TypeError):
+                continue
+
+            addr_name = str(addr.get("name", "")).strip() or "Unknown"
+            subnet_key = str(network)
+            self._rule_addr_dup_subnet(addr, addr_name, subnet_key, subnets_seen)
 
     def _check_service_objects(self, services: List[Dict[str, Any]]):
+        if not isinstance(services, list):
+            return
+
         for svc in services:
-            svc_name = svc.get('name', '')
+            if not isinstance(svc, dict):
+                continue
+            svc_name = str(svc.get("name", "Unknown")).strip() or "Unknown"
             self._rule_svc_wide_port(svc, svc_name)
 
-    def _check_unused_policies(self, policies: List[Dict[str, Any]], policy_hits: List[Dict[str, Any]]):
-        hit_dict = {str(p.get('policyid')): p for p in policy_hits}
+    def _check_unused_policies(
+        self,
+        policies: List[Dict[str, Any]],
+        policy_hits: List[Dict[str, Any]],
+    ):
+        if not isinstance(policies, list):
+            return
+
+        if not isinstance(policy_hits, list):
+            policy_hits = []
+
+        hit_dict: Dict[str, Dict[str, Any]] = {}
+        for hit in policy_hits:
+            if not isinstance(hit, dict):
+                continue
+            policy_id = hit.get("policyid")
+            if policy_id is None:
+                continue
+            hit_dict[str(policy_id)] = hit
+
         for pol in policies:
-            pol_id = str(pol.get('policyid', 'Unknown'))
+            if not isinstance(pol, dict):
+                continue
+            pol_id = str(pol.get("policyid", "Unknown"))
             self._rule_pol_unused(pol, pol_id, hit_dict)
 
-    def _check_policies_and_relationships(self, policies: List[Dict[str, Any]], address_map: Dict[str, Any]) -> List[Dict]:
-        parsed_policies = []
+    @staticmethod
+    def _policy_name(pol: Dict[str, Any]) -> str:
+        return str(pol.get("name", "")).strip()
+
+    @staticmethod
+    def _policy_id(pol: Dict[str, Any]) -> str:
+        return str(pol.get("policyid", "Unknown")).strip()
+
+    @staticmethod
+    def _policy_action(pol: Dict[str, Any]) -> str:
+        return str(pol.get("action", "")).strip().lower()
+
+    @staticmethod
+    def _policy_enabled(pol: Dict[str, Any]) -> bool:
+        return str(pol.get("status", "enable")).strip().lower() != "disable"
+
+    def _prepare_policy(
+        self,
+        pol: Dict[str, Any],
+        address_map: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        if not isinstance(pol, dict) or not self._policy_enabled(pol):
+            return None
+
+        pol_id = self._policy_id(pol)
+        pol_name = self._policy_name(pol)
+        action = self._policy_action(pol)
+
+        src_intf = network_utils.extract_names(pol.get("srcintf"))
+        dst_intf = network_utils.extract_names(pol.get("dstintf"))
+        src_addrs = network_utils.extract_names(pol.get("srcaddr"))
+        dst_addrs = network_utils.extract_names(pol.get("dstaddr"))
+        services = network_utils.extract_names(pol.get("service"))
+
+        target_name = f"Policy ID {pol_id} ({pol_name})"
+
+        self._rule_pol_no_desc(pol, target_name)
+        self._rule_pol_no_log(pol, target_name)
+        self._rule_pol_overly_permissive(action, src_addrs, dst_addrs, target_name)
+        self._rule_pol_any_intf(action, src_intf, dst_intf, target_name)
+        self._rule_pol_any_svc(action, services, target_name)
+
+        src_nets = network_utils.get_networks_from_names(src_addrs, address_map)
+        dst_nets = network_utils.get_networks_from_names(dst_addrs, address_map)
+
+        return {
+            "id": pol_id,
+            "name": pol_name,
+            "action": action,
+            "src_intf": src_intf,
+            "dst_intf": dst_intf,
+            "services": services,
+            "src_nets": network_utils.normalize_networks(src_nets),
+            "dst_nets": network_utils.normalize_networks(dst_nets),
+            "raw": pol,
+        }
+
+    @staticmethod
+    def _has_scope_intersection(
+        rel_src_intf: str,
+        rel_dst_intf: str,
+        rel_svc: str,
+        rel_src_net: str,
+        rel_dst_net: str,
+    ) -> bool:
+        relations = {
+            rel_src_intf,
+            rel_dst_intf,
+            rel_svc,
+            rel_src_net,
+            rel_dst_net,
+        }
+        return "NONE" not in relations
+
+    def _check_policies_and_relationships(
+        self,
+        policies: List[Dict[str, Any]],
+        address_map: Dict[str, Any],
+    ) -> List[Dict[str, Any]]:
+        parsed_policies: List[Dict[str, Any]] = []
+
+        if not isinstance(policies, list):
+            return parsed_policies
 
         for pol in policies:
-            pol_id = str(pol.get('policyid', 'Unknown'))
-            pol_name = pol.get('name', '')
-            action = str(pol.get('action', '')).strip().lower()
-            status = str(pol.get('status', 'enable')).strip().lower()
-            if status == 'disable': continue
+            prepared = self._prepare_policy(pol, address_map)
+            if prepared is not None:
+                parsed_policies.append(prepared)
 
-            src_intf = network_utils.extract_names(pol.get('srcintf'))
-            dst_intf = network_utils.extract_names(pol.get('dstintf'))
-            src_addrs_str = list(network_utils.extract_names(pol.get('srcaddr')))
-            dst_addrs_str = list(network_utils.extract_names(pol.get('dstaddr')))
-            services = network_utils.extract_names(pol.get('service'))
+        count = len(parsed_policies)
 
-            target_name = f"Policy ID {pol_id} ({pol_name})"
+        for i in range(count - 1):
+            pol_a = parsed_policies[i]
 
-            self._rule_pol_no_desc(pol, target_name)
-            self._rule_pol_no_log(pol, target_name)
-            self._rule_pol_overly_permissive(action, src_addrs_str, dst_addrs_str, target_name)
-            self._rule_pol_any_intf(action, src_intf, dst_intf, target_name)
-            self._rule_pol_any_svc(action, services, target_name)
+            for j in range(i + 1, count):
+                pol_b = parsed_policies[j]
 
-            src_nets = network_utils.get_networks_from_names(src_addrs_str, address_map)
-            dst_nets = network_utils.get_networks_from_names(dst_addrs_str, address_map)
+                rel_src_intf = network_utils.compare_sets(
+                    pol_a["src_intf"], pol_b["src_intf"], "any"
+                )
+                if rel_src_intf == "NONE":
+                    continue
 
-            parsed_policies.append({
-                'id': pol_id, 'name': pol_name, 'action': action,
-                'src_intf': src_intf, 'dst_intf': dst_intf, 'services': services,
-                'src_nets': src_nets, 'dst_nets': dst_nets, 'raw': pol
-            })
+                rel_dst_intf = network_utils.compare_sets(
+                    pol_a["dst_intf"], pol_b["dst_intf"], "any"
+                )
+                if rel_dst_intf == "NONE":
+                    continue
 
-        for i, pol_a in enumerate(parsed_policies):
-            for j, pol_b in enumerate(parsed_policies):
-                if i >= j: continue 
+                rel_svc = network_utils.compare_sets(
+                    pol_a["services"], pol_b["services"], "all"
+                )
+                if rel_svc == "NONE":
+                    continue
 
-                rel_src_intf = network_utils.compare_sets(pol_a['src_intf'], pol_b['src_intf'], 'any')
-                rel_dst_intf = network_utils.compare_sets(pol_a['dst_intf'], pol_b['dst_intf'], 'any')
-                rel_svc = network_utils.compare_sets(pol_a['services'], pol_b['services'], 'all')
-                rel_src_net = network_utils.compare_networks(pol_a['src_nets'], pol_b['src_nets'])
-                rel_dst_net = network_utils.compare_networks(pol_a['dst_nets'], pol_b['dst_nets'])
+                rel_src_net = network_utils.compare_networks(
+                    pol_a["src_nets"], pol_b["src_nets"]
+                )
+                if rel_src_net == "NONE":
+                    continue
 
-                combined_rel = network_utils.combine_relations([rel_src_intf, rel_dst_intf, rel_svc, rel_src_net, rel_dst_net])
-                if combined_rel == 'NONE': continue
+                rel_dst_net = network_utils.compare_networks(
+                    pol_a["dst_nets"], pol_b["dst_nets"]
+                )
+                if rel_dst_net == "NONE":
+                    continue
 
-                action_a = pol_a['action']
-                action_b = pol_b['action']
+                combined_rel = network_utils.combine_relations(
+                    [
+                        rel_src_intf,
+                        rel_dst_intf,
+                        rel_svc,
+                        rel_src_net,
+                        rel_dst_net,
+                    ]
+                )
+
+                if combined_rel == "NONE":
+                    continue
+
+                action_a = pol_a["action"]
+                action_b = pol_b["action"]
                 target_b_name = f"Policy ID {pol_b['id']} ({pol_b['name']})"
                 target_a_name = f"Policy ID {pol_a['id']} ({pol_a['name']})"
-                
-                info_json = {"reason": f"Policy A ({pol_a['id']}) ditempatkan sebelum Policy B ({pol_b['id']})."}
 
-                self._rule_pol_duplicate(pol_a, pol_b, action_a, action_b, combined_rel, target_b_name, dict(info_json))
-                self._rule_pol_shadowed(pol_a, pol_b, action_a, action_b, combined_rel, target_b_name, dict(info_json))
-                self._rule_pol_redundant(pol_a, pol_b, action_a, action_b, combined_rel, target_a_name, target_b_name, dict(info_json))
-                self._rule_pol_conflict(pol_a, pol_b, action_a, action_b, combined_rel, target_b_name, dict(info_json))
-                        
+                relation_details = self._relation_details(
+                    rel_src_intf,
+                    rel_dst_intf,
+                    rel_svc,
+                    rel_src_net,
+                    rel_dst_net,
+                    combined_rel,
+                )
+
+                info_json = {
+                    "reason": (
+                        f"Policy A (ID {pol_a['id']}) berada sebelum "
+                        f"Policy B (ID {pol_b['id']}) dalam urutan analisis."
+                    ),
+                    "relations": relation_details,
+                }
+
+                self._rule_pol_duplicate(
+                    pol_a,
+                    action_a,
+                    action_b,
+                    combined_rel,
+                    target_b_name,
+                    info_json,
+                )
+
+                self._rule_pol_shadowed(
+                    pol_a,
+                    action_a,
+                    action_b,
+                    combined_rel,
+                    target_b_name,
+                    info_json,
+                )
+
+                self._rule_pol_redundant(
+                    pol_a,
+                    pol_b,
+                    action_a,
+                    action_b,
+                    combined_rel,
+                    target_a_name,
+                    target_b_name,
+                    info_json,
+                )
+
+                self._rule_pol_conflict(
+                    pol_a,
+                    action_a,
+                    action_b,
+                    combined_rel,
+                    target_b_name,
+                    info_json,
+                )
+
         return parsed_policies
-        
-    def run_all_checks(self, policies, interfaces, addresses, services, policy_hits) -> Tuple[List[Finding], List[Dict]]:
+
+    def run_all_checks(
+        self,
+        policies,
+        interfaces,
+        addresses,
+        services,
+        policy_hits,
+    ) -> Tuple[List[Finding], List[Dict[str, Any]]]:
+        policies = policies if isinstance(policies, list) else []
+        interfaces = interfaces if isinstance(interfaces, list) else []
+        addresses = addresses if isinstance(addresses, list) else []
+        services = services if isinstance(services, list) else []
+        policy_hits = policy_hits if isinstance(policy_hits, list) else []
+
         address_map = network_utils.build_address_map(addresses)
 
-        parsed_policies = self._check_policies_and_relationships(policies, address_map)
+        parsed_policies = self._check_policies_and_relationships(
+            policies,
+            address_map,
+        )
         self._check_unused_policies(policies, policy_hits)
         self._check_interfaces(interfaces)
         self._check_address_objects(addresses)
         self._check_service_objects(services)
-        
+
         return self.findings_to_create, parsed_policies
