@@ -24,30 +24,28 @@ class ComplianceScanner(BaseService):
 
     def _load_active_rules(self) -> Dict[str, ComplianceRule]:
         core_rules = [
-            ('POL_OVERLY_PERMISSIVE', 'Overly Permissive Policy (ANY/ALL)', 'Policy mengizinkan trafik dengan cakupan Source atau Destination terbuka sangat luas (ANY/ALL).', 'HIGH', 'Ganti objek "all" dengan spesifik IP Address, Subnet, atau Address Group.'),
-            ('POL_ANY_INTF', 'Overly Permissive Interface (ANY)', 'Policy mengizinkan trafik dengan cakupan Incoming atau Outgoing Interface terbuka untuk semua (ANY).', 'HIGH', 'Spesifikasikan Incoming dan Outgoing interface yang diizinkan untuk melewati policy ini.'),
-            ('POL_ANY_SVC', 'Overly Permissive Service (ALL)', 'Policy mengizinkan trafik untuk semua layanan/port (ALL).', 'HIGH', 'Spesifikasikan layanan atau port yang benar-benar dibutuhkan.'),
-            ('POL_UNUSED', 'Potentially Unused Policy', 'Firewall policy dalam status aktif namun tercatat memiliki 0 Hit (tidak pernah dilalui traffic).', 'INFO', 'Lakukan review bisnis. Policy ini mungkin perlu dinonaktifkan.'),
-            ('POL_SHADOWED', 'Shadowed Policy (Tertimpa Urutan)', 'Policy spesifik diletakkan di bawah policy umum yang memiliki Action berlawanan, sehingga tidak akan pernah dieksekusi.', 'CRITICAL', 'Pindahkan letak Policy ini ke urutan di atas Policy yang membayanginya.'),
-            ('POL_REDUNDANT', 'Potentially Redundant Policy', 'Subnet jaringan sepenuhnya tercakup di dalam policy lain yang memiliki action yang sama.', 'MEDIUM', 'Hapus Policy ini karena traffic-nya sudah diizinkan/diblokir secara lebih luas oleh policy lain.'),
-            ('POL_CONFLICT', 'Conflicting Policy', 'Terdapat bentrokan parsial (overlap) pada cakupan IP address dengan policy lain yang memiliki Action berlawanan.', 'MEDIUM', 'Pisahkan subnet yang bentrok menjadi policy independen.'),
-            ('POL_DUPLICATE', 'Duplicate Policy', 'Terdapat duplikasi identik dengan policy lain (Source, Dest, Service, dan Action sama).', 'MEDIUM', 'Hapus salah satu policy yang menduplikat.'),
-            ('POL_NO_DESC', 'Policy without Description/Comment', 'Policy tidak memiliki komentar atau deskripsi.', 'LOW', 'Tambahkan komentar yang menjelaskan tujuan bisnis dari policy tersebut.'),
-            ('INTF_DOWN', 'Interface Down', 'Interface dalam keadaan admin down.', 'INFO', 'Verifikasi apakah interface ini masih dibutuhkan.'),
-            ('INTF_NO_IP', 'Interface Active Without IP', 'Interface berstatus UP namun tidak memiliki konfigurasi IP.', 'LOW', 'Berikan IP Address atau nonaktifkan interface jika tidak digunakan.'),
-            ('ADDR_DUP_SUBNET', 'Duplicate Address Object', 'Terdapat objek address berbeda yang menunjuk ke subnet yang sama persis.', 'LOW', 'Gabungkan atau hapus objek address yang berulang.'),
-            ('SVC_WIDE_PORT', 'Wide Port Range Service', 'Service membuka rentang port yang sangat besar (1-65535).', 'LOW', 'Persempit rentang port sesuai kebutuhan aplikasi.'),
-            ('POL_NO_LOG', 'Logging Policy Disabled', 'Fitur pencatatan log pada policy tidak diaktifkan.', 'MEDIUM', 'Aktifkan Log Allowed Traffic, minimal untuk Security Events.')
+            ('POL_OVERLY_PERMISSIVE', 'Overly Permissive Policy (ANY/ALL)'),
+            ('POL_ANY_INTF', 'Overly Permissive Interface (ANY)'),
+            ('POL_ANY_SVC', 'Overly Permissive Service (ALL)'),
+            ('POL_UNUSED', 'Potentially Unused Policy'),
+            ('POL_SHADOWED', 'Shadowed Policy (Tertimpa Urutan)'),
+            ('POL_REDUNDANT', 'Potentially Redundant Policy'),
+            ('POL_CONFLICT', 'Conflicting Policy'),
+            ('POL_DUPLICATE', 'Duplicate Policy'),
+            ('POL_NO_DESC', 'Policy without Description/Comment'),
+            ('INTF_DOWN', 'Interface Down'),
+            ('INTF_NO_IP', 'Interface Active Without IP'),
+            ('ADDR_DUP_SUBNET', 'Duplicate Address Object'),
+            ('SVC_WIDE_PORT', 'Wide Port Range Service'),
+            ('POL_NO_LOG', 'Logging Policy Disabled'),
+            ('POL_POTENTIALLY_MERGE', 'Potentially Merge Policy')
         ]
         
-        for code, name, desc, sev, rec in core_rules:
+        for code, name in core_rules:
             ComplianceRule.objects.get_or_create(
                 rule_code=code,
                 defaults={
                     'name': name,
-                    'description': desc,
-                    'severity': sev,
-                    'recommendation': rec,
                     'is_active': True
                 }
             )
