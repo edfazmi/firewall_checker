@@ -273,17 +273,63 @@ def _scope_from_address(addr: Dict[str, Any]) -> Scope:
     return _make_scope("opaque", (obj_type, canonical))
 
 
+def _group_members(obj: Dict[str, Any]) -> List[str]:
+    members = obj.get("member", obj.get("members", obj.get("member-list", obj.get("member_list"))))
+    return _split_values(members)
+
+
+def _is_address_group(obj: Dict[str, Any]) -> bool:
+    obj_type = _lower(obj.get("type"))
+    return obj_type in {"addrgrp", "address-group", "address_group", "group"} or any(
+        key in obj for key in ("member", "members", "member-list", "member_list")
+    ) and obj_type not in {"ipmask", "subnet", "interface-subnet", "iprange", "fqdn", "wildcard-fqdn", "geography", "wildcard", "mac", "ipam", "dynamic"}
+
+
 def build_address_map(addresses: List[Dict[str, Any]]) -> Dict[str, Scope]:
     address_map: Dict[str, Scope] = {}
     if not isinstance(addresses, list):
         return address_map
+    groups: List[Dict[str, Any]] = []
     for addr in addresses:
-        if isinstance(addr, dict):
-            name = _clean_name(addr.get("name"))
-            if name:
-                address_map[name] = _scope_from_address(addr)
+        if not isinstance(addr, dict):
+            continue
+        name = _clean_name(addr.get("name"))
+        if not name:
+            continue
+        if _is_address_group(addr):
+            groups.append(addr)
+        else:
+            address_map[name] = _scope_from_address(addr)
+    pending = list(groups)
+    for _ in range(len(groups) + 1):
+        progressed = False
+        remaining: List[Dict[str, Any]] = []
+        for group in pending:
+            name = _clean_name(group.get("name"))
+            members = _group_members(group)
+            member_scopes: List[Scope] = []
+            for member in members:
+                scope = address_map.get(member)
+                if scope is None:
+                    scope = address_map.get(next((key for key in address_map if key.lower() == member.lower()), ""))
+                if scope is not None:
+                    member_scopes.extend(_flatten_scope(scope))
+            if member_scopes and len(member_scopes) == len(members):
+                unique: List[Scope] = []
+                seen: Set[str] = set()
+                for scope in member_scopes:
+                    key = repr(scope)
+                    if key not in seen:
+                        unique.append(scope)
+                        seen.add(key)
+                address_map[name] = _make_scope("atom-set", atoms=tuple(unique), name=name)
+                progressed = True
+            else:
+                remaining.append(group)
+        pending = remaining
+        if not pending or not progressed:
+            break
     return address_map
-
 
 def _universal_scope() -> Scope:
     return _make_scope("network", ipaddress.IPv4Network("0.0.0.0/0"))
@@ -482,27 +528,28 @@ def compare_sets(set_a: Iterable[str], set_b: Iterable[str], univ_kw: str = "any
 
 
 def _parse_port_ranges(value: Any) -> List[Tuple[int, int]]:
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple, set)):
+        values = []
+        for item in value:
+            values.extend(_parse_port_ranges(item))
+        return _merge_ranges(values)
     result: List[Tuple[int, int]] = []
-    for token in re.split(r"[,;\s]+", _clean_name(value)):
+    text = _clean_name(value)
+    if not text:
+        return []
+    for token in re.split(r"[,;\s]+", text):
+        token = token.strip()
         if not token:
             continue
-        for part in [token]:
-            if "-" in part:
-                left, right = part.split("-", 1)
-            else:
-                left = right = part
-            try:
-                start = int(left)
-                end = int(right)
-            except (ValueError, TypeError):
+        token = token.split(":", 1)[0].strip()
+        if not token:
+            continue
+        for part in token.split("/"):
+            part = part.strip()
+            if not part:
                 continue
-            if 0 <= start <= 65535 and 0 <= end <= 65535:
-                if start > end:
-                    start, end = end, start
-                result.append((start, end))
-    if not result:
-        text = _clean_name(value)
-        for part in re.split(r"[,;\s]+", text):
             if "-" in part:
                 left, right = part.split("-", 1)
             else:
@@ -520,7 +567,16 @@ def _parse_port_ranges(value: Any) -> List[Tuple[int, int]]:
 
 
 def _merge_ranges(ranges: Iterable[Tuple[int, int]]) -> List[Tuple[int, int]]:
-    valid = sorted((int(start), int(end)) for start, end in ranges if 0 <= int(start) <= int(end) <= 65535)
+    valid: List[Tuple[int, int]] = []
+    for start, end in ranges:
+        try:
+            start_int = int(start)
+            end_int = int(end)
+        except (TypeError, ValueError):
+            continue
+        if 0 <= start_int <= end_int <= 65535:
+            valid.append((start_int, end_int))
+    valid.sort()
     merged: List[List[int]] = []
     for start, end in valid:
         if not merged or start > merged[-1][1] + 1:
@@ -530,67 +586,155 @@ def _merge_ranges(ranges: Iterable[Tuple[int, int]]) -> List[Tuple[int, int]]:
     return [(start, end) for start, end in merged]
 
 
-def _protocol_values(service: Dict[str, Any]) -> Set[str]:
+def _protocol_tokens(service: Dict[str, Any]) -> Set[str]:
     values: Set[str] = set()
-    for key in ("protocol", "protocols", "protocol-number", "protocol_number", "ip-protocol", "ip_protocol"):
+    for key in ("protocol", "protocols"):
         raw = service.get(key)
         for value in _split_values(raw):
-            for token in re.split(r"[/\s]+", _lower(value)):
+            for token in re.split(r"[/\s,]+", _lower(value)):
                 if token:
                     values.add(token)
-    if service.get("tcp-portrange") or service.get("tcp_portrange"):
-        values.add("tcp")
-    if service.get("udp-portrange") or service.get("udp_portrange"):
-        values.add("udp")
-    if not values:
-        if service.get("sctp-portrange") or service.get("sctp_portrange"):
-            values.add("sctp")
-        elif service.get("icmp-type") is not None or service.get("icmp_type") is not None:
-            values.add("icmp")
+    return values
+
+
+def _protocol_number(service: Dict[str, Any]) -> Optional[int]:
+    for key in ("protocol-number", "protocol_number"):
+        raw = service.get(key)
+        if raw in (None, ""):
+            continue
+        try:
+            number = int(str(raw).strip())
+        except (TypeError, ValueError):
+            continue
+        if 0 <= number <= 255:
+            return number
+    return None
+
+
+def _service_protocols(service: Dict[str, Any]) -> Tuple[Set[str], bool]:
+    tokens = _protocol_tokens(service)
+    number = _protocol_number(service)
+    tcp_ranges = _parse_port_ranges(service.get("tcp-portrange", service.get("tcp_portrange")))
+    udp_ranges = _parse_port_ranges(service.get("udp-portrange", service.get("udp_portrange")))
+    sctp_ranges = _parse_port_ranges(service.get("sctp-portrange", service.get("sctp_portrange")))
+    aliases = {6: "tcp", 17: "udp", 132: "sctp", 1: "icmp", 58: "icmp6"}
+    explicit = {token for token in tokens if token in {"tcp", "udp", "sctp", "icmp", "icmp6", "ip", "any", "all"}}
+    ranged = set()
+    if tcp_ranges:
+        ranged.add("tcp")
+    if udp_ranges:
+        ranged.add("udp")
+    if sctp_ranges:
+        ranged.add("sctp")
+    if number in aliases:
+        explicit.add(aliases[number])
+    if "any" in explicit or "all" in explicit or "ip" in explicit:
+        return {"any"}, False
+    web_aliases = {
+        "http": "tcp",
+        "https": "tcp",
+        "ftp": "tcp",
+        "connect": "tcp",
+        "socks-tcp": "tcp",
+        "socks-udp": "udp",
+    }
+    for token, protocol in web_aliases.items():
+        if token in tokens:
+            explicit.add(protocol)
+    compound = len(explicit.intersection({"tcp", "udp", "sctp"})) > 1
+    if ranged:
+        if compound:
+            protocols = ranged
         else:
-            values.add("ip")
-    aliases = {"6": "tcp", "17": "udp", "132": "sctp", "1": "icmp", "58": "icmp6"}
-    return {aliases.get(value, value) for value in values}
+            protocols = explicit.intersection({"tcp", "udp", "sctp"}) | ranged
+    else:
+        protocols = set(explicit)
+    return protocols, compound
+
+
+def _protocol_values(service: Dict[str, Any]) -> Set[str]:
+    protocols, _ = _service_protocols(service)
+    return protocols
 
 
 def _service_scope_from_object(service: Dict[str, Any]) -> Scope:
     name = _clean_name(service.get("name"))
-    protocols = _protocol_values(service)
-    atoms: List[Tuple[str, int, int]] = []
+    protocols, compound = _service_protocols(service)
     tcp_ranges = _parse_port_ranges(service.get("tcp-portrange", service.get("tcp_portrange")))
     udp_ranges = _parse_port_ranges(service.get("udp-portrange", service.get("udp_portrange")))
     sctp_ranges = _parse_port_ranges(service.get("sctp-portrange", service.get("sctp_portrange")))
-    for protocol in protocols:
-        if protocol == "tcp":
+    atoms: List[Tuple[str, int, int]] = []
+    if "any" in protocols:
+        atoms.append(("any", 0, 65535))
+    else:
+        if "tcp" in protocols:
             ranges = tcp_ranges or [(0, 65535)]
-            atoms.extend((protocol, start, end) for start, end in ranges)
-        elif protocol == "udp":
+            atoms.extend(("tcp", start, end) for start, end in ranges)
+        if "udp" in protocols:
             ranges = udp_ranges or [(0, 65535)]
-            atoms.extend((protocol, start, end) for start, end in ranges)
-        elif protocol == "sctp":
+            atoms.extend(("udp", start, end) for start, end in ranges)
+        if "sctp" in protocols:
             ranges = sctp_ranges or [(0, 65535)]
-            atoms.extend((protocol, start, end) for start, end in ranges)
-        elif protocol in {"ip", "any", "all"}:
-            atoms.append(("any", 0, 65535))
-        else:
+            atoms.extend(("sctp", start, end) for start, end in ranges)
+        if "icmp" in protocols:
+            atoms.append(("icmp", 0, 255))
+        if "icmp6" in protocols:
+            atoms.append(("icmp6", 0, 255))
+        known = {"tcp", "udp", "sctp", "icmp", "icmp6", "any"}
+        for protocol in protocols - known:
             atoms.append((protocol, 0, 65535))
-    if not atoms:
-        atoms.append(("ip", 0, 65535))
     return _make_scope("service-set", atoms=tuple(sorted(set(atoms))), name=name)
+
+def _is_service_group(service: Dict[str, Any]) -> bool:
+    obj_type = _lower(service.get("type", service.get("category", "")))
+    if obj_type in {"service-group", "service_group", "svcgrp", "group"}:
+        return True
+    return any(key in service for key in ("member", "members", "member-list", "member_list")) and not any(
+        service.get(key) for key in ("tcp-portrange", "tcp_portrange", "udp-portrange", "udp_portrange", "sctp-portrange", "sctp_portrange")
+    )
 
 
 def build_service_map(services: List[Dict[str, Any]]) -> Dict[str, Scope]:
     service_map: Dict[str, Scope] = {}
     if not isinstance(services, list):
         return service_map
+    groups: List[Dict[str, Any]] = []
     for service in services:
         if not isinstance(service, dict):
             continue
         name = _clean_name(service.get("name"))
-        if name:
+        if not name:
+            continue
+        if _is_service_group(service):
+            groups.append(service)
+        else:
             service_map[name] = _service_scope_from_object(service)
+    pending = list(groups)
+    for _ in range(len(groups) + 1):
+        progressed = False
+        remaining: List[Dict[str, Any]] = []
+        for group in pending:
+            name = _clean_name(group.get("name"))
+            members = _group_members(group)
+            atoms: List[Tuple[str, int, int]] = []
+            resolved = True
+            for member in members:
+                scope = service_map.get(member)
+                if scope is None:
+                    scope = service_map.get(next((key for key in service_map if key.lower() == member.lower()), ""))
+                if scope is None:
+                    resolved = False
+                    break
+                atoms.extend(_flatten_service_scope(scope))
+            if members and resolved and atoms:
+                service_map[name] = _make_scope("service-set", atoms=tuple(sorted(set(atoms))), name=name)
+                progressed = True
+            else:
+                remaining.append(group)
+        pending = remaining
+        if not pending or not progressed:
+            break
     return service_map
-
 
 def _universal_service() -> Scope:
     return _make_scope("service-set", atoms=(("any", 0, 65535),), name="all")

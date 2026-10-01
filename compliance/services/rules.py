@@ -48,17 +48,33 @@ class RuleEngine:
             subnets_seen[subnet_key] = addr_name
 
     def _rule_svc_wide_port(self, svc: Dict[str, Any], svc_name: str) -> None:
-        tcp_range = str(svc.get("tcp-portrange", svc.get("tcp_portrange", ""))).strip().replace(" ", "")
-        udp_range = str(svc.get("udp-portrange", svc.get("udp_portrange", ""))).strip().replace(" ", "")
-        sctp_range = str(svc.get("sctp-portrange", svc.get("sctp_portrange", ""))).strip().replace(" ", "")
-        if "SVC_WIDE_PORT" in self.active_rules and any(
-            value in {"1-65535", "0-65535"} for value in (tcp_range, udp_range, sctp_range)
-        ):
+        if "SVC_WIDE_PORT" not in self.active_rules:
+            return
+        ranges = []
+        for key in ("tcp-portrange", "tcp_portrange", "udp-portrange", "udp_portrange", "sctp-portrange", "sctp_portrange"):
+            ranges.extend(network_utils._parse_port_ranges(svc.get(key)))
+        if any(start == 0 and end == 65535 or start == 1 and end == 65535 for start, end in ranges):
             self._add_finding("SVC_WIDE_PORT", f"Service {svc_name}", svc)
 
     def _rule_pol_no_desc(self, pol: Dict[str, Any], target_name: str) -> None:
         if "POL_NO_DESC" in self.active_rules and not str(pol.get("comments", "")).strip():
             self._add_finding("POL_NO_DESC", target_name, pol)
+
+    def _rule_pol_broad_scope(self, src_addrs: set, dst_addrs: set, target_name: str) -> None:
+        if "POL_BROAD_SCOPE" not in self.active_rules:
+            return
+        source_all = any(str(addr).strip().lower() == "all" for addr in src_addrs)
+        destination_all = any(str(addr).strip().lower() == "all" for addr in dst_addrs)
+        if source_all or destination_all:
+            self._add_finding(
+                "POL_BROAD_SCOPE",
+                target_name,
+                {
+                    "message": "Policy memiliki cakupan Source atau Destination ALL.",
+                    "source_all": source_all,
+                    "destination_all": destination_all,
+                },
+            )
 
     def _rule_pol_overly_permissive(self, src_addrs: set, dst_addrs: set, target_name: str) -> None:
         if "POL_OVERLY_PERMISSIVE" not in self.active_rules:
@@ -97,11 +113,14 @@ class RuleEngine:
     def _rule_pol_unused(self, pol: Dict[str, Any], pol_id: str, hit_dict: Dict[str, Dict[str, Any]]) -> None:
         if "POL_UNUSED" not in self.active_rules or str(pol.get("status", "enable")).strip().lower() == "disable":
             return
-        hit_data = hit_dict.get(pol_id, {}) or {}
+        hit_data = hit_dict.get(pol_id)
+        if not isinstance(hit_data, dict):
+            return
+        raw_hit_count = hit_data.get("hit_count", hit_data.get("hit-count", hit_data.get("packets")))
         try:
-            hit_count = int(hit_data.get("hit_count", hit_data.get("packets", 0)) or 0)
+            hit_count = int(raw_hit_count or 0)
         except (TypeError, ValueError):
-            hit_count = 0
+            return
         if hit_count == 0:
             self._add_finding(
                 "POL_UNUSED",
