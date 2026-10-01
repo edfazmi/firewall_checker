@@ -42,22 +42,22 @@ class RuleEngine:
             self._add_finding("POL_NO_DESC", target_name, pol)
 
     def _rule_pol_overly_permissive(self, action: str, src_addrs: set, dst_addrs: set, target_name: str) -> None:
-        if action != "accept" or "POL_OVERLY_PERMISSIVE" not in self.active_rules:
+        if "POL_OVERLY_PERMISSIVE" not in self.active_rules:
             return
         if any(str(addr).strip().lower() == "all" for addr in src_addrs) or any(str(addr).strip().lower() == "all" for addr in dst_addrs):
-            self._add_finding("POL_OVERLY_PERMISSIVE", target_name, {"message": "Policy mengizinkan trafik dengan cakupan Source atau Destination sangat luas (ANY/ALL)."})
+            self._add_finding("POL_OVERLY_PERMISSIVE", target_name, {"message": f"Policy {action.upper()} memiliki cakupan Source atau Destination sangat luas (ANY/ALL)."})
 
     def _rule_pol_any_intf(self, action: str, src_intf_set: set, dst_intf_set: set, target_name: str) -> None:
-        if action != "accept" or "POL_ANY_INTF" not in self.active_rules:
+        if "POL_ANY_INTF" not in self.active_rules:
             return
         if any(str(intf).strip().lower() == "any" for intf in src_intf_set) or any(str(intf).strip().lower() == "any" for intf in dst_intf_set):
-            self._add_finding("POL_ANY_INTF", target_name, {"message": "Policy mengizinkan trafik dengan cakupan Incoming atau Outgoing interface sangat luas (ANY)."})
+            self._add_finding("POL_ANY_INTF", target_name, {"message": f"Policy {action.upper()} menggunakan Incoming atau Outgoing interface ANY sehingga cakupan interface sangat luas."})
 
     def _rule_pol_any_svc(self, action: str, services_set: set, target_name: str) -> None:
-        if action != "accept" or "POL_ANY_SVC" not in self.active_rules:
+        if "POL_ANY_SVC" not in self.active_rules:
             return
         if any(str(service).strip().lower() == "all" for service in services_set):
-            self._add_finding("POL_ANY_SVC", target_name, {"message": "Policy mengizinkan trafik dengan cakupan Service terbuka untuk semua (ALL)."})
+            self._add_finding("POL_ANY_SVC", target_name, {"message": f"Policy {action.upper()} menggunakan Service ALL sehingga mencakup semua service."})
 
     def _rule_pol_unused(self, pol: Dict[str, Any], pol_id: str, hit_dict: Dict[str, Dict[str, Any]]) -> None:
         if "POL_UNUSED" not in self.active_rules or str(pol.get("status", "enable")).strip().lower() == "disable":
