@@ -109,7 +109,9 @@ class RuleEngine:
             self._add_finding("POL_POTENTIALLY_MERGE", target_b_name, {**info_json, "message": "Berpotensi digabung. Policy memiliki traffic non-service yang sama, tetapi daftar service berbeda. Service dari kedua policy dapat dipertimbangkan untuk digabung dalam satu policy.", "related_policy_id": pol_a["id"], "related_policy_name": pol_a["name"], "merge_with_policy_id": pol_b["id"], "merge_with_policy_name": pol_b["name"], "service_relationship": rel_svc, "suggested_action": "Pertimbangkan menggabungkan service kedua policy menjadi satu policy setelah memastikan kebutuhan akses tetap terpenuhi."})
 
     def _rule_pol_conflict(self, pol_a: Dict[str, Any], action_a: str, action_b: str, combined_rel: str, target_b_name: str, info_json: Dict[str, Any]) -> None:
-        if "POL_CONFLICT" in self.active_rules and action_a != action_b and combined_rel in {"OVERLAP", "INCOMPARABLE"}:
+        if "POL_CONFLICT" not in self.active_rules or action_a == action_b:
+            return
+        if combined_rel in {"SUBSET", "SUPERSET", "OVERLAP", "INCOMPARABLE"}:
             self._add_finding("POL_CONFLICT", target_b_name, {**info_json, "message": f"Policy memiliki cakupan trafik yang beririsan dengan action berbeda dari Policy ID {pol_a['id']}.", "related_policy_id": pol_a["id"], "related_policy_name": pol_a["name"]})
 
     def _check_interfaces(self, interfaces: List[Dict[str, Any]]) -> None:
