@@ -21,9 +21,13 @@
 
     <aside id="sidebar" class="fixed inset-y-0 left-0 w-64 bg-brand-sidebar text-white flex flex-col transform -translate-x-full md:relative md:translate-x-0 transition duration-200 ease-in-out shadow-xl z-50">
 
-        <div class="h-20 flex items-center justify-center border-b border-[#1A2E5E] relative overflow-hidden">
-            <img src="{% static 'images/logo2-ptba.png' %}" alt="Logo PTBA" class="absolute top-3 left-1/2 transform -translate-x-1/2 w-[85%] pointer-events-none">
-            
+        <div class="h-20 flex items-center justify-center border-b border-[#1A2E5E] relative">
+            <img
+                src="{% static 'images/logo_siakaf1.png' %}"
+                alt="Logo SIAKAF"
+                class="w-100 h-100 object-contain"
+            >
+
             <button id="closeSidebarBtn" class="md:hidden absolute right-4 top-6 text-gray-400 hover:text-white z-20 bg-brand-sidebar rounded-full p-1">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
@@ -62,15 +66,23 @@
             <h4 class="text-xs font-semibold text-gray-400 mb-3 uppercase tracking-wider">Contact Person</h4>
             <div class="space-y-2 text-xs text-gray-300">
                 <div class="flex items-center">
-                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg> 
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                    </svg> 
                     phaedraaldimo@gmail.com
                 </div>
+
                 <div class="flex items-center">
-                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg> 
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2"></path>
+                    </svg> 
                     edfazmi@gmail.com
                 </div>
+
                 <div class="flex items-center">
-                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg> 
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2"></path>
+                    </svg> 
                     zzarimaahtullah@gmail.com
                 </div>
             </div>
@@ -100,8 +112,11 @@
                         <div class="w-10 h-10 rounded-full bg-brand-sidebar text-white flex items-center justify-center font-bold text-sm">
                             {{ user.first_name|default:user.username|slice:":2"|upper }}
                         </div>
+
                         <div class="hidden md:block text-left">
-                            <div class="text-sm font-bold text-gray-900 leading-tight">{{ user.get_full_name|default:user.username }}</div>
+                            <div class="text-sm font-bold text-gray-900 leading-tight">
+                                {{ user.get_full_name|default:user.username }}
+                            </div>
                             <div class="text-xs text-gray-500">Admin</div>
                         </div>
                     </a>
@@ -140,9 +155,9 @@
                 sidebarOverlay.classList.toggle('hidden');
             }
 
-            if(mobileMenuBtn) mobileMenuBtn.addEventListener('click', toggleSidebar);
-            if(sidebarOverlay) sidebarOverlay.addEventListener('click', toggleSidebar);
-            if(closeSidebarBtn) closeSidebarBtn.addEventListener('click', toggleSidebar);
+            if (mobileMenuBtn) mobileMenuBtn.addEventListener('click', toggleSidebar);
+            if (sidebarOverlay) sidebarOverlay.addEventListener('click', toggleSidebar);
+            if (closeSidebarBtn) closeSidebarBtn.addEventListener('click', toggleSidebar);
         });
     </script>
 
