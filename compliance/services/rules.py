@@ -273,9 +273,7 @@ class RuleEngine:
         ):
             return
         service_relation = relations.get("service")
-        if service_relation != "OVERLAP":
-            return
-        if network_utils.traffic_exact(relations):
+        if service_relation not in {network_utils.OVERLAP, network_utils.NONE}:
             return
         self._add_finding(
             "POL_POTENTIALLY_MERGE",
@@ -416,8 +414,6 @@ class RuleEngine:
             pol_a["svc_scopes"],
             pol_b["svc_scopes"],
         )
-        if not network_utils.traffic_intersects(relations):
-            return None
         return relations
 
     def _process_policy_pair(

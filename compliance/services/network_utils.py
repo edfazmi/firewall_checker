@@ -668,14 +668,20 @@ def _service_scope_from_object(service: Dict[str, Any]) -> Scope:
         atoms.append(("any", 0, 65535))
     else:
         if "tcp" in protocols:
-            ranges = tcp_ranges or [(0, 65535)]
-            atoms.extend(("tcp", start, end) for start, end in ranges)
+            if tcp_ranges:
+                atoms.extend(("tcp", start, end) for start, end in tcp_ranges)
+            elif not compound:
+                atoms.append(("tcp", 0, 65535))
         if "udp" in protocols:
-            ranges = udp_ranges or [(0, 65535)]
-            atoms.extend(("udp", start, end) for start, end in ranges)
+            if udp_ranges:
+                atoms.extend(("udp", start, end) for start, end in udp_ranges)
+            elif not compound:
+                atoms.append(("udp", 0, 65535))
         if "sctp" in protocols:
-            ranges = sctp_ranges or [(0, 65535)]
-            atoms.extend(("sctp", start, end) for start, end in ranges)
+            if sctp_ranges:
+                atoms.extend(("sctp", start, end) for start, end in sctp_ranges)
+            elif not compound:
+                atoms.append(("sctp", 0, 65535))
         if "icmp" in protocols:
             atoms.append(("icmp", 0, 255))
         if "icmp6" in protocols:
