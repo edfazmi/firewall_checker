@@ -217,7 +217,14 @@ class RuleEngine:
     ) -> None:
         if "POL_REDUNDANT" not in self.active_rules or action_a != action_b:
             return
-        if network_utils.traffic_covers(relations) and not network_utils.traffic_exact(relations):
+        covering_relations = {
+            relations.get("source_interface"),
+            relations.get("destination_interface"),
+            relations.get("source_network"),
+            relations.get("destination_network"),
+            relations.get("service"),
+        }
+        if covering_relations.issubset({network_utils.EXACT, network_utils.SUPERSET}) and not network_utils.traffic_exact(relations):
             self._add_finding(
                 "POL_REDUNDANT",
                 target_b_name,
@@ -266,14 +273,30 @@ class RuleEngine:
         if "POL_POTENTIALLY_MERGE" not in self.active_rules or action_a != action_b:
             return
         if not (
-            relations.get("source_interface") == "EXACT"
-            and relations.get("destination_interface") == "EXACT"
-            and relations.get("source_network") == "EXACT"
-            and relations.get("destination_network") == "EXACT"
+            relations.get("source_interface") == network_utils.EXACT
+            and relations.get("destination_interface") == network_utils.EXACT
         ):
             return
+        network_relations = {
+            relations.get("source_network"),
+            relations.get("destination_network"),
+        }
+        if network_utils.NONE in network_relations:
+            return
+        if not network_relations.issubset({
+            network_utils.EXACT,
+            network_utils.SUPERSET,
+            network_utils.SUBSET,
+            network_utils.OVERLAP,
+        }):
+            return
         service_relation = relations.get("service")
-        if service_relation not in {network_utils.OVERLAP, network_utils.NONE}:
+        if service_relation not in {
+            network_utils.SUPERSET,
+            network_utils.SUBSET,
+            network_utils.OVERLAP,
+            network_utils.NONE,
+        }:
             return
         self._add_finding(
             "POL_POTENTIALLY_MERGE",
