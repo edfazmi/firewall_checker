@@ -247,17 +247,26 @@ class RuleEngine:
     ) -> None:
         if "POL_CONFLICT" not in self.active_rules or action_a == action_b:
             return
-        if network_utils.traffic_intersects(relations) and not network_utils.traffic_covers(relations):
-            self._add_finding(
-                "POL_CONFLICT",
-                target_b_name,
-                {
-                    **info_json,
-                    "message": f"Policy memiliki sebagian trafik yang beririsan dengan action berbeda dari Policy ID {pol_a['id']}.",
-                    "related_policy_id": pol_a["id"],
-                    "related_policy_name": pol_a["name"],
-                },
-            )
+        if not network_utils.traffic_intersects(relations):
+            return
+        if network_utils.traffic_covers(relations):
+            return
+        reverse_covers = all(
+            relation in {network_utils.EXACT, network_utils.SUBSET}
+            for relation in relations.values()
+        )
+        if reverse_covers:
+            return
+        self._add_finding(
+            "POL_CONFLICT",
+            target_b_name,
+            {
+                **info_json,
+                "message": f"Policy memiliki sebagian trafik yang beririsan dengan action berbeda dari Policy ID {pol_a['id']} tanpa adanya cakupan penuh dari salah satu policy.",
+                "related_policy_id": pol_a["id"],
+                "related_policy_name": pol_a["name"],
+            },
+        )
 
     def _rule_pol_potentially_merge(
         self,
@@ -303,7 +312,7 @@ class RuleEngine:
             target_b_name,
             {
                 **info_json,
-                "message": "Berpotensi digabung. Source, Destination, dan interface sama, sedangkan cakupan service berbeda atau beririsan.",
+                "message": "Berpotensi digabung. Interface sama, cakupan Source dan Destination identik, saling mencakup, atau beririsan, sedangkan cakupan service berbeda atau beririsan.",
                 "related_policy_id": pol_a["id"],
                 "related_policy_name": pol_a["name"],
                 "merge_with_policy_id": pol_b["id"],
