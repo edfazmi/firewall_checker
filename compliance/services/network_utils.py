@@ -10,6 +10,7 @@ OVERLAP = "OVERLAP"
 INCOMPARABLE = "INCOMPARABLE"
 NONE = "NONE"
 VALID_RELATIONS = {EXACT, SUPERSET, SUBSET, OVERLAP, INCOMPARABLE, NONE}
+TRAFFIC_DIMENSIONS = ("schedule", "source_interface", "destination_interface", "source_network", "destination_network", "service")
 Network = ipaddress.IPv4Network
 Scope = Dict[str, Any]
 _WILDCARD_EXPANSION_LIMIT = 4096
@@ -275,6 +276,16 @@ def _scope_from_address(addr: Dict[str, Any]) -> Scope:
 
 def _group_members(obj: Dict[str, Any]) -> List[str]:
     members = obj.get("member", obj.get("members", obj.get("member-list", obj.get("member_list"))))
+    if isinstance(members, (list, tuple, set)):
+        result: List[str] = []
+        for item in members:
+            if isinstance(item, dict):
+                value = item.get("name")
+                if value is not None and _clean_name(value):
+                    result.append(_clean_name(value))
+            else:
+                result.extend(_split_values(item))
+        return result
     return _split_values(members)
 
 
@@ -307,20 +318,27 @@ def build_address_map(addresses: List[Dict[str, Any]]) -> Dict[str, Scope]:
         for group in pending:
             name = _clean_name(group.get("name"))
             members = _group_members(group)
-            member_scopes: List[Scope] = []
+            if not members:
+                remaining.append(group)
+                continue
+            atoms: List[Scope] = []
+            resolved = True
             for member in members:
                 scope = address_map.get(member)
                 if scope is None:
-                    scope = address_map.get(next((key for key in address_map if key.lower() == member.lower()), ""))
-                if scope is not None:
-                    member_scopes.extend(_flatten_scope(scope))
-            if member_scopes and len(member_scopes) == len(members):
+                    lower_member = member.lower()
+                    scope = next((value for key, value in address_map.items() if key.lower() == lower_member), None)
+                if scope is None:
+                    resolved = False
+                    break
+                atoms.extend(_flatten_scope(scope))
+            if resolved and atoms:
                 unique: List[Scope] = []
                 seen: Set[str] = set()
-                for scope in member_scopes:
-                    key = repr(scope)
+                for atom in atoms:
+                    key = repr(atom)
                     if key not in seen:
-                        unique.append(scope)
+                        unique.append(atom)
                         seen.add(key)
                 address_map[name] = _make_scope("atom-set", atoms=tuple(unique), name=name)
                 progressed = True
@@ -444,10 +462,20 @@ def compare_address_scopes(scopes_a: Iterable[Scope], scopes_b: Iterable[Scope])
             b.extend(_flatten_scope(scope))
     if not a or not b:
         return NONE
+    a_keys = {repr(atom) for atom in a}
+    b_keys = {repr(atom) for atom in b}
+    if a_keys == b_keys:
+        return EXACT
     a_covers_b = all(any(_atom_covers(atom_a, atom_b) for atom_a in a) for atom_b in b)
     b_covers_a = all(any(_atom_covers(atom_b, atom_a) for atom_b in b) for atom_a in a)
+    if a_covers_b and b_covers_a:
+        return EXACT
+    if a_covers_b:
+        return SUPERSET
+    if b_covers_a:
+        return SUBSET
     intersects = any(_atom_intersection(atom_a, atom_b) for atom_a in a for atom_b in b)
-    return _relation_from_set_operations(a_covers_b, b_covers_a, intersects)
+    return _relation_from_set_operations(False, False, intersects)
 
 
 def get_networks_from_names(names_list: Iterable[str], address_map: Dict[str, Scope]) -> List[Network]:
@@ -514,17 +542,25 @@ def compare_sets(set_a: Iterable[str], set_b: Iterable[str], univ_kw: str = "any
     universal = _clean_name(univ_kw).lower()
     has_univ_a = _has_universal(a, universal)
     has_univ_b = _has_universal(b, universal)
+    a_lower = {value.lower() for value in a}
+    b_lower = {value.lower() for value in b}
+    if a_lower == b_lower:
+        return EXACT
     if has_univ_a and has_univ_b:
         return EXACT
     if has_univ_a:
         return SUPERSET
     if has_univ_b:
         return SUBSET
-    a_lower = {value.lower() for value in a}
-    b_lower = {value.lower() for value in b}
     a_covers_b = b_lower.issubset(a_lower)
     b_covers_a = a_lower.issubset(b_lower)
-    return _relation_from_set_operations(a_covers_b, b_covers_a, bool(a_lower.intersection(b_lower)))
+    if a_covers_b and b_covers_a:
+        return EXACT
+    if a_covers_b:
+        return SUPERSET
+    if b_covers_a:
+        return SUBSET
+    return _relation_from_set_operations(False, False, bool(a_lower.intersection(b_lower)))
 
 
 def _parse_port_ranges(value: Any) -> List[Tuple[int, int]]:
@@ -796,10 +832,20 @@ def compare_service_scopes(scopes_a: Iterable[Scope], scopes_b: Iterable[Scope])
     b = [atom for scope in scopes_b if isinstance(scope, dict) for atom in _flatten_service_scope(scope)]
     if not a or not b:
         return NONE
+    a_keys = set(a)
+    b_keys = set(b)
+    if a_keys == b_keys:
+        return EXACT
     a_covers_b = all(any(_service_atom_covers(atom_a, atom_b) for atom_a in a) for atom_b in b)
     b_covers_a = all(any(_service_atom_covers(atom_b, atom_a) for atom_b in b) for atom_a in a)
+    if a_covers_b and b_covers_a:
+        return EXACT
+    if a_covers_b:
+        return SUPERSET
+    if b_covers_a:
+        return SUBSET
     intersects = any(_service_atom_intersection(atom_a, atom_b) for atom_a in a for atom_b in b)
-    return _relation_from_set_operations(a_covers_b, b_covers_a, intersects)
+    return _relation_from_set_operations(False, False, intersects)
 
 
 def compare_traffic_dimensions(
@@ -813,8 +859,11 @@ def compare_traffic_dimensions(
     dst_addr_b: Iterable[Scope],
     svc_a: Iterable[Scope],
     svc_b: Iterable[Scope],
+    schedule_a: Iterable[str] = ("always",),
+    schedule_b: Iterable[str] = ("always",),
 ) -> Dict[str, Relation]:
     return {
+        "schedule": compare_sets(schedule_a, schedule_b, "always"),
         "source_interface": compare_sets(src_intf_a, src_intf_b, "any"),
         "destination_interface": compare_sets(dst_intf_a, dst_intf_b, "any"),
         "source_network": compare_address_scopes(src_addr_a, src_addr_b),
@@ -824,33 +873,15 @@ def compare_traffic_dimensions(
 
 
 def traffic_intersects(relations: Dict[str, Relation]) -> bool:
-    return all(relations.get(key) != NONE for key in (
-        "source_interface",
-        "destination_interface",
-        "source_network",
-        "destination_network",
-        "service",
-    ))
+    return all(relations.get(key) != NONE for key in TRAFFIC_DIMENSIONS)
 
 
 def traffic_covers(relations: Dict[str, Relation]) -> bool:
-    return all(relations.get(key) in {EXACT, SUPERSET} for key in (
-        "source_interface",
-        "destination_interface",
-        "source_network",
-        "destination_network",
-        "service",
-    ))
+    return all(relations.get(key) in {EXACT, SUPERSET} for key in TRAFFIC_DIMENSIONS)
 
 
 def traffic_exact(relations: Dict[str, Relation]) -> bool:
-    return all(relations.get(key) == EXACT for key in (
-        "source_interface",
-        "destination_interface",
-        "source_network",
-        "destination_network",
-        "service",
-    ))
+    return all(relations.get(key) == EXACT for key in TRAFFIC_DIMENSIONS)
 
 
 def extract_names(data: Any) -> Set[str]:

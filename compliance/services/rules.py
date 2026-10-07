@@ -1,26 +1,47 @@
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
-
+from django.utils import timezone
 from compliance.models import Finding
 from . import network_utils
 
-
 class RuleEngine:
-    def __init__(self, scan_record, active_rules: Dict[str, Any]):
+    def __init__(self, scan_record, active_rules: Dict[str, Any], finding_sink=None, finding_batch_size: int = 500):
         self.scan_record = scan_record
         self.active_rules = active_rules or {}
+        self.finding_sink = finding_sink
+        self.finding_batch_size = max(1, int(finding_batch_size or 500))
         self.findings_to_create: List[Finding] = []
+        self.risk_index: Dict[str, Dict[str, Any]] = {}
 
     def _add_finding(self, rule_code: str, element_name: str, details: Dict[str, Any]) -> None:
         rule = self.active_rules.get(rule_code)
-        if rule:
-            self.findings_to_create.append(
-                Finding(
-                    scan=self.scan_record,
-                    rule=rule,
-                    element_name=element_name,
-                    element_details=details,
-                )
-            )
+        if not rule:
+            return
+        finding = Finding(
+            scan=self.scan_record,
+            rule=rule,
+            element_name=element_name,
+            element_details=details,
+        )
+        self.findings_to_create.append(finding)
+        risk = self.risk_index.setdefault(
+            element_name,
+            {"factors": [], "severities": []},
+        )
+        rule_name = getattr(rule, "name", rule_code)
+        severity = str(getattr(rule, "severity", "INFO")).upper()
+        if rule_name not in risk["factors"]:
+            risk["factors"].append(rule_name)
+        risk["severities"].append(severity)
+        if self.finding_sink and len(self.findings_to_create) >= self.finding_batch_size:
+            self.flush_findings()
+
+    def flush_findings(self) -> None:
+        if not self.finding_sink or not self.findings_to_create:
+            return
+        batch = self.findings_to_create
+        self.findings_to_create = []
+        self.finding_sink(batch)
 
     def _rule_intf_down(self, intf: Dict[str, Any], intf_name: str, status: str) -> None:
         if status == "down" and "INTF_DOWN" in self.active_rules:
@@ -59,22 +80,6 @@ class RuleEngine:
     def _rule_pol_no_desc(self, pol: Dict[str, Any], target_name: str) -> None:
         if "POL_NO_DESC" in self.active_rules and not str(pol.get("comments", "")).strip():
             self._add_finding("POL_NO_DESC", target_name, pol)
-
-    def _rule_pol_broad_scope(self, src_addrs: set, dst_addrs: set, target_name: str) -> None:
-        if "POL_BROAD_SCOPE" not in self.active_rules:
-            return
-        source_all = any(str(addr).strip().lower() == "all" for addr in src_addrs)
-        destination_all = any(str(addr).strip().lower() == "all" for addr in dst_addrs)
-        if source_all or destination_all:
-            self._add_finding(
-                "POL_BROAD_SCOPE",
-                target_name,
-                {
-                    "message": "Policy memiliki cakupan Source atau Destination ALL.",
-                    "source_all": source_all,
-                    "destination_all": destination_all,
-                },
-            )
 
     def _rule_pol_overly_permissive(self, src_addrs: set, dst_addrs: set, target_name: str) -> None:
         if "POL_OVERLY_PERMISSIVE" not in self.active_rules:
@@ -121,14 +126,19 @@ class RuleEngine:
             hit_count = int(raw_hit_count or 0)
         except (TypeError, ValueError):
             return
-        if hit_count == 0:
+        raw_last_used = None
+        for key in ("last_used", "last-used", "last_hit", "last-hit", "last_hit_time", "last-hit-time", "last_used_time", "last-used-time"):
+            if hit_data.get(key) not in (None, ""):
+                raw_last_used = hit_data.get(key)
+                break
+        if hit_count == 0 and self._parse_last_used(raw_last_used) is None:
             self._add_finding(
                 "POL_UNUSED",
                 f"Policy ID {pol_id} ({pol.get('name', '')})",
                 {
-                    "message": "Policy aktif namun 0 hits.",
+                    "message": "Policy aktif tidak memiliki catatan penggunaan yang tersedia dan counter hit bernilai 0.",
                     "hit_count": 0,
-                    "last_used": hit_data.get("last_used", "N/A"),
+                    "last_used": "N/A",
                 },
             )
 
@@ -146,6 +156,7 @@ class RuleEngine:
     @staticmethod
     def _relation_details(relations: Dict[str, str]) -> Dict[str, Any]:
         return {
+            "schedule": relations.get("schedule", "NONE"),
             "source_interface": relations.get("source_interface", "NONE"),
             "destination_interface": relations.get("destination_interface", "NONE"),
             "service": relations.get("service", "NONE"),
@@ -185,20 +196,16 @@ class RuleEngine:
     ) -> None:
         if "POL_SHADOWED" not in self.active_rules or action_a == action_b:
             return
+        if network_utils.traffic_exact(relations):
+            return
         if not network_utils.traffic_covers(relations):
             return
-        relationship = "EXACT" if network_utils.traffic_exact(relations) else "SUPERSET"
-        message = (
-            f"Shadowed secara penuh. Policy sebelumnya (ID {pol_a['id']}) memiliki cakupan identik dengan action berbeda."
-            if relationship == "EXACT"
-            else f"Shadowed. Policy sebelumnya (ID {pol_a['id']}) mencakup seluruh trafik Policy B dengan action berbeda."
-        )
         self._add_finding(
             "POL_SHADOWED",
             target_b_name,
             {
                 **info_json,
-                "message": message,
+                "message": f"Policy B tertimpa oleh Policy ID {pol_a['id']} yang berada lebih awal dan mencakup seluruh trafik Policy B dengan action berbeda.",
                 "related_policy_id": pol_a["id"],
                 "related_policy_name": pol_a["name"],
             },
@@ -249,22 +256,28 @@ class RuleEngine:
             return
         if not network_utils.traffic_intersects(relations):
             return
-        if network_utils.traffic_covers(relations):
+        if network_utils.traffic_exact(relations):
+            conflict_type = "EXACT_SCOPE_DIFFERENT_ACTION"
+            message = f"Policy memiliki cakupan trafik identik dengan action berbeda dari Policy ID {pol_a['id']}."
+        elif network_utils.traffic_covers(relations):
             return
-        reverse_covers = all(
+        elif all(
             relation in {network_utils.EXACT, network_utils.SUBSET}
             for relation in relations.values()
-        )
-        if reverse_covers:
+        ):
             return
+        else:
+            conflict_type = "PARTIAL_OVERLAP_DIFFERENT_ACTION"
+            message = f"Policy memiliki sebagian cakupan trafik yang beririsan dengan action berbeda dari Policy ID {pol_a['id']} tanpa hubungan cakupan penuh antara kedua policy."
         self._add_finding(
             "POL_CONFLICT",
             target_b_name,
             {
                 **info_json,
-                "message": f"Policy memiliki sebagian trafik yang beririsan dengan action berbeda dari Policy ID {pol_a['id']} tanpa adanya cakupan penuh dari salah satu policy.",
+                "message": message,
                 "related_policy_id": pol_a["id"],
                 "related_policy_name": pol_a["name"],
+                "conflict_type": conflict_type,
             },
         )
 
@@ -282,7 +295,8 @@ class RuleEngine:
         if "POL_POTENTIALLY_MERGE" not in self.active_rules or action_a != action_b:
             return
         if not (
-            relations.get("source_interface") == network_utils.EXACT
+            relations.get("schedule") == network_utils.EXACT
+            and relations.get("source_interface") == network_utils.EXACT
             and relations.get("destination_interface") == network_utils.EXACT
         ):
             return
@@ -363,8 +377,57 @@ class RuleEngine:
             if isinstance(svc, dict):
                 self._rule_svc_wide_port(svc, str(svc.get("name", "Unknown")).strip() or "Unknown")
 
+    def _parse_last_used(self, value: Any) -> Optional[datetime]:
+        if value in (None, ""):
+            return None
+        if isinstance(value, datetime):
+            return value
+        text = str(value).strip()
+        if not text:
+            return None
+        candidates = [text, text.replace("Z", "+00:00")]
+        for candidate in candidates:
+            try:
+                parsed = datetime.fromisoformat(candidate)
+                if parsed.tzinfo is None:
+                    parsed = timezone.make_aware(parsed, timezone.get_current_timezone())
+                return parsed
+            except ValueError:
+                continue
+        return None
+
+    def _rule_pol_not_used_1month(self, pol: Dict[str, Any], pol_id: str, hit_dict: Dict[str, Dict[str, Any]]) -> None:
+        if "POL_NOT_USED_1MONTH" not in self.active_rules or not self._policy_enabled(pol):
+            return
+        hit_data = hit_dict.get(pol_id)
+        if not isinstance(hit_data, dict):
+            return
+        raw_last_used = None
+        for key in ("last_used", "last-used", "last_hit", "last-hit", "last_hit_time", "last-hit-time", "last_used_time", "last-used-time"):
+            if hit_data.get(key) not in (None, ""):
+                raw_last_used = hit_data.get(key)
+                break
+        last_used = self._parse_last_used(raw_last_used)
+        if last_used is None:
+            return
+        if last_used.tzinfo is None:
+            last_used = timezone.make_aware(last_used, timezone.get_current_timezone())
+        elapsed = timezone.now() - last_used
+        if elapsed.total_seconds() >= 30 * 24 * 60 * 60:
+            self._add_finding(
+                "POL_NOT_USED_1MONTH",
+                f"Policy ID {pol_id} ({pol.get('name', '')})",
+                {
+                    "message": "Policy aktif tidak digunakan selama minimal 30 hari berdasarkan waktu terakhir digunakan.",
+                    "last_used": str(raw_last_used),
+                    "elapsed_days": round(elapsed.total_seconds() / 86400, 2),
+                },
+            )
+
     def _check_unused_policies(self, policies: List[Dict[str, Any]], policy_hits: List[Dict[str, Any]]) -> None:
-        if not isinstance(policies, list) or "POL_UNUSED" not in self.active_rules:
+        if not isinstance(policies, list):
+            return
+        if not any(code in self.active_rules for code in ("POL_UNUSED", "POL_NOT_USED_1MONTH")):
             return
         hit_dict = {
             str(hit["policyid"]): hit
@@ -372,8 +435,11 @@ class RuleEngine:
             if isinstance(hit, dict) and hit.get("policyid") is not None
         }
         for pol in policies:
-            if isinstance(pol, dict):
-                self._rule_pol_unused(pol, self._policy_id(pol), hit_dict)
+            if not isinstance(pol, dict):
+                continue
+            pol_id = self._policy_id(pol)
+            self._rule_pol_unused(pol, pol_id, hit_dict)
+            self._rule_pol_not_used_1month(pol, pol_id, hit_dict)
 
     @staticmethod
     def _policy_name(pol: Dict[str, Any]) -> str:
@@ -391,6 +457,53 @@ class RuleEngine:
     def _policy_enabled(pol: Dict[str, Any]) -> bool:
         return str(pol.get("status", "enable")).strip().lower() != "disable"
 
+    @staticmethod
+    def _value_enabled(value: Any) -> bool:
+        if value is None:
+            return False
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (list, tuple, set, dict)):
+            return bool(value)
+        text = str(value).strip().lower()
+        return text not in {"", "0", "false", "no", "off", "disable", "disabled", "none", "null"}
+
+    @classmethod
+    def _unsupported_relational_features(cls, pol: Dict[str, Any]) -> List[str]:
+        reasons: List[str] = []
+        negate_fields = ("srcaddr-negate", "srcaddr_negate", "dstaddr-negate", "dstaddr_negate", "service-negate", "service_negate")
+        for key in negate_fields:
+            if key in pol and cls._value_enabled(pol.get(key)):
+                reasons.append(key)
+        ipv6_fields = ("srcaddr6", "srcaddr6-negate", "srcaddr6_negate", "dstaddr6", "dstaddr6-negate", "dstaddr6_negate", "ipv6")
+        for key in ipv6_fields:
+            if key in pol and cls._value_enabled(pol.get(key)):
+                reasons.append(key)
+        ip_version = str(pol.get("ip-version", pol.get("ip_version", ""))).strip().lower()
+        if ip_version in {"6", "ipv6", "ipv6-only"}:
+            reasons.append("ip-version")
+        unsupported_fields = (
+            "internet-service",
+            "internet-service-name",
+            "internet-service-src",
+            "internet-service-dst",
+            "application-list",
+            "application_list",
+            "users",
+            "groups",
+            "fsso-groups",
+            "fsso_groups",
+        )
+        for key in unsupported_fields:
+            if key in pol and cls._value_enabled(pol.get(key)):
+                reasons.append(key)
+        return sorted(set(reasons))
+
+    @staticmethod
+    def _schedule_names(pol: Dict[str, Any]) -> set:
+        schedule = network_utils.extract_names(pol.get("schedule"))
+        return schedule or {"always"}
+
     def _prepare_policy(
         self,
         pol: Dict[str, Any],
@@ -407,16 +520,17 @@ class RuleEngine:
         src_addrs = network_utils.extract_names(pol.get("srcaddr"))
         dst_addrs = network_utils.extract_names(pol.get("dstaddr"))
         services = network_utils.extract_names(pol.get("service"))
+        schedule = self._schedule_names(pol)
         src_scopes = network_utils.get_address_scopes_from_names(src_addrs, address_map)
         dst_scopes = network_utils.get_address_scopes_from_names(dst_addrs, address_map)
         svc_scopes = network_utils.get_service_scopes_from_names(services, service_map)
+        unsupported = self._unsupported_relational_features(pol)
+        if not src_intf or not dst_intf or not src_scopes or not dst_scopes or not svc_scopes:
+            unsupported.append("unresolved-traffic-scope")
         target_name = f"Policy ID {pol_id} ({pol_name})"
         self._rule_pol_no_desc(pol, target_name)
         self._rule_pol_no_log(pol, target_name)
-        if "POL_BROAD_SCOPE" in self.active_rules:
-            self._rule_pol_broad_scope(src_addrs, dst_addrs, target_name)
-        else:
-            self._rule_pol_overly_permissive(src_addrs, dst_addrs, target_name)
+        self._rule_pol_overly_permissive(src_addrs, dst_addrs, target_name)
         self._rule_pol_any_intf(src_intf, dst_intf, target_name)
         self._rule_pol_any_svc(services, target_name)
         return {
@@ -426,14 +540,19 @@ class RuleEngine:
             "src_intf": src_intf,
             "dst_intf": dst_intf,
             "services": services,
+            "schedule": schedule,
             "src_scopes": src_scopes,
             "dst_scopes": dst_scopes,
             "svc_scopes": svc_scopes,
             "raw": pol,
+            "relational_supported": not unsupported,
+            "unsupported_relational_features": unsupported,
         }
 
     @staticmethod
     def _compare_policy_pair(pol_a: Dict[str, Any], pol_b: Dict[str, Any]) -> Optional[Dict[str, str]]:
+        if not pol_a.get("relational_supported", False) or not pol_b.get("relational_supported", False):
+            return None
         relations = network_utils.compare_traffic_dimensions(
             pol_a["src_intf"],
             pol_b["src_intf"],
@@ -445,7 +564,14 @@ class RuleEngine:
             pol_b["dst_scopes"],
             pol_a["svc_scopes"],
             pol_b["svc_scopes"],
+            pol_a["schedule"],
+            pol_b["schedule"],
         )
+        if relations.get("schedule") == network_utils.NONE:
+            return None
+        for key in ("source_interface", "destination_interface", "source_network", "destination_network"):
+            if relations.get(key) == network_utils.NONE:
+                return None
         return relations
 
     def _process_policy_pair(
@@ -487,6 +613,8 @@ class RuleEngine:
         ]
         for idx_a, pol_a in enumerate(parsed[:-1]):
             for pol_b in parsed[idx_a + 1:]:
+                if not pol_a.get("relational_supported") or not pol_b.get("relational_supported"):
+                    continue
                 relations = self._compare_policy_pair(pol_a, pol_b)
                 if relations:
                     self._process_policy_pair(pol_a, pol_b, relations)
@@ -512,4 +640,5 @@ class RuleEngine:
         self._check_interfaces(interfaces)
         self._check_address_objects(addresses)
         self._check_service_objects(services)
+        self.flush_findings()
         return self.findings_to_create, parsed_policies

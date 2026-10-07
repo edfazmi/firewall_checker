@@ -17,22 +17,24 @@ class FortiGateAPIService(BaseService):
             'Authorization': f'Bearer {raw_token}',
             'Accept': 'application/json'
         }
-        self.timeout = 10 
+        self.timeout = 10
+        self.session = requests.Session()
 
     def _make_request(self, endpoint: str, is_monitor: bool = False) -> Any:
         url_prefix = self.monitor_url if is_monitor else self.base_url
         url = f"{url_prefix}/{endpoint}"
         
         try:
-            response = requests.get(url, headers=self.headers, verify=False, timeout=self.timeout)
+            response = self.session.get(url, headers=self.headers, verify=False, timeout=self.timeout)
             response.raise_for_status()
             data = response.json()
             
             if data.get('http_status') not in [200, 201] and 'results' not in data:
-                 raise FirewallAPIError(f"API Error: {data.get('error', 'Unknown Error')}")
-                 
+                raise FirewallAPIError(f"API Error: {data.get('error', 'Unknown Error')}")
             return data.get('results', data)
 
+        except FirewallAPIError:
+            raise
         except requests.exceptions.Timeout:
             raise FirewallAPIError(f"Timeout saat menghubungi {self.device.ip_address}")
         except requests.exceptions.ConnectionError:
@@ -57,7 +59,7 @@ class FortiGateAPIService(BaseService):
     def test_connection(self) -> bool:
         try:
             url = f"{self.monitor_url}/system/status"
-            response = requests.get(url, headers=self.headers, verify=False, timeout=self.timeout)
+            response = self.session.get(url, headers=self.headers, verify=False, timeout=self.timeout)
             response.raise_for_status()
             raw_data = response.json()
 
@@ -110,7 +112,11 @@ class FortiGateAPIService(BaseService):
             policy_monitor = self._make_request('firewall/policy', is_monitor=True)
             never_used = 0
             for pm in policy_monitor:
-                hits = pm.get('hit_count', pm.get('packets', 0))
+                raw_hits = pm.get('hit_count', pm.get('hit-count', pm.get('packets', 0)))
+                try:
+                    hits = int(raw_hits or 0)
+                except (TypeError, ValueError):
+                    continue
                 if hits == 0:
                     never_used += 1
             stats['never_used'] = never_used

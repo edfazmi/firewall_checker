@@ -13,6 +13,7 @@ from .rules import RuleEngine
 logger = logging.getLogger('application')
 
 class ComplianceScanner(BaseService):
+    FINDING_BATCH_SIZE = 500
     def __init__(self, device: Device, user=None):
         self.device = device
         self.user = user
@@ -21,6 +22,10 @@ class ComplianceScanner(BaseService):
         self.findings_to_create = []
         self.risks_to_create = []
         self.active_rules = self._load_active_rules()
+
+    def _store_finding_batch(self, findings):
+        if findings:
+            Finding.objects.bulk_create(findings, batch_size=self.FINDING_BATCH_SIZE)
 
     def _load_active_rules(self) -> Dict[str, ComplianceRule]:
         core_rules = [
@@ -38,7 +43,8 @@ class ComplianceScanner(BaseService):
             ('ADDR_DUP_SUBNET', 'Duplicate Address Object'),
             ('SVC_WIDE_PORT', 'Wide Port Range Service'),
             ('POL_NO_LOG', 'Logging Policy Disabled'),
-            ('POL_POTENTIALLY_MERGE', 'Potentially Merge Policy')
+            ('POL_POTENTIALLY_MERGE', 'Potentially Merge Policy'),
+            ('POL_NOT_USED_1MONTH', 'Potentially Inactive Policy (Last Used >= 1 Month)')
         ]
         
         for code, name in core_rules:
@@ -53,55 +59,36 @@ class ComplianceScanner(BaseService):
         rules = ComplianceRule.objects.filter(is_active=True)
         return {rule.rule_code.strip(): rule for rule in rules}
 
-    def _assess_policy_risks(self, parsed_policies: List[Dict]):
+    def _assess_policy_risks(self, parsed_policies: List[Dict], risk_index: Dict[str, Dict]):
+        severity_order = ("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO")
         for pol in parsed_policies:
-            factors = []
-            severities_found = []
-            
             target_name = f"Policy ID {pol['id']} ({pol['name']})"
-            related_findings = [f for f in self.findings_to_create if f.element_name == target_name]
-            
-            for f in related_findings:
-                if f.rule.name not in factors:
-                    factors.append(f.rule.name)
-                severities_found.append(f.rule.severity)
-
-            if 'CRITICAL' in severities_found:
-                severity = 'CRITICAL'
-            elif 'HIGH' in severities_found:
-                severity = 'HIGH'
-            elif 'MEDIUM' in severities_found:
-                severity = 'MEDIUM'
-            elif 'LOW' in severities_found:
-                severity = 'LOW'
-            elif 'INFO' in severities_found:
-                severity = 'INFO'
-            else:
-                severity = 'INFO'
-
+            risk_data = risk_index.get(target_name, {})
+            factors = list(risk_data.get("factors", []))
+            severities_found = [str(value).upper() for value in risk_data.get("severities", [])]
+            severity = next((level for level in severity_order if level in severities_found), "INFO")
             if not factors:
                 factors.append("Konfigurasi beroperasi normal tanpa temuan konflik.")
-
-            self.risks_to_create.append(PolicyRiskAssessment(
-                scan=self.scan_record,
-                policy_id=pol['id'],
-                policy_name=pol['name'],
-                severity=severity,
-                contributing_factors=factors
-            ))
+            self.risks_to_create.append(
+                PolicyRiskAssessment(
+                    scan=self.scan_record,
+                    policy_id=pol['id'],
+                    policy_name=pol['name'],
+                    severity=severity,
+                    contributing_factors=factors
+                )
+            )
 
     def _finalize_scan(self):
         if self.findings_to_create:
-            Finding.objects.bulk_create(self.findings_to_create)
+            self._store_finding_batch(self.findings_to_create)
+            self.findings_to_create = []
         if self.risks_to_create:
-            PolicyRiskAssessment.objects.bulk_create(self.risks_to_create)
-
+            PolicyRiskAssessment.objects.bulk_create(self.risks_to_create, batch_size=self.FINDING_BATCH_SIZE)
         self.scan_record.status = 'SUCCESS'
         self.scan_record.save(update_fields=['status'])
-        
         self.device.last_sync = timezone.now()
         self.device.save(update_fields=['last_sync'])
-        
         if hasattr(self, 'log_action'):
             self.log_action('info', "Scan sukses diselesaikan.")
 
@@ -116,23 +103,30 @@ class ComplianceScanner(BaseService):
             services = self.api_service.get_service_objects()
             policy_hits = self.api_service.get_policy_monitor()
 
-            rule_engine = RuleEngine(self.scan_record, self.active_rules)
-            findings, parsed_policies = rule_engine.run_all_checks(
+            rule_engine = RuleEngine(
+                self.scan_record,
+                self.active_rules,
+                finding_sink=self._store_finding_batch,
+                finding_batch_size=self.FINDING_BATCH_SIZE,
+            )
+            _, parsed_policies = rule_engine.run_all_checks(
                 policies, interfaces, addresses, services, policy_hits
             )
-            self.findings_to_create.extend(findings)
-
-            self._assess_policy_risks(parsed_policies)
+            self._assess_policy_risks(parsed_policies, rule_engine.risk_index)
 
             self._finalize_scan()
             return self.scan_record
 
         except FirewallAPIError as e:
+            Finding.objects.filter(scan=self.scan_record).delete()
+            PolicyRiskAssessment.objects.filter(scan=self.scan_record).delete()
             self.scan_record.status = 'FAILED'
             self.scan_record.error_message = str(e)
             self.scan_record.save()
             raise ComplianceEngineError(f"API Error: {str(e)}")
         except Exception as e:
+            Finding.objects.filter(scan=self.scan_record).delete()
+            PolicyRiskAssessment.objects.filter(scan=self.scan_record).delete()
             self.scan_record.status = 'FAILED'
             self.scan_record.error_message = f"Internal Error: {str(e)}"
             self.scan_record.save()
