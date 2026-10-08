@@ -283,6 +283,8 @@ class RuleEngine:
             message = f"Policy memiliki cakupan trafik identik dengan action berbeda dari Policy ID {pol_a['id']}."
         elif network_utils.traffic_covers(relations):
             return
+        elif network_utils.traffic_is_subset(relations):
+            return
         else:
             conflict_type = "PARTIAL_OVERLAP_DIFFERENT_ACTION"
             message = f"Policy memiliki sebagian cakupan trafik yang beririsan dengan action berbeda dari Policy ID {pol_a['id']} tanpa hubungan cakupan penuh antara kedua policy."

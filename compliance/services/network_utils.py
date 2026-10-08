@@ -974,6 +974,10 @@ def traffic_covers(relations: Dict[str, Relation]) -> bool:
     return all(relations.get(key) in {EXACT, SUPERSET} for key in TRAFFIC_DIMENSIONS)
 
 
+def traffic_is_subset(relations: Dict[str, Relation]) -> bool:
+    return all(relations.get(key) in {EXACT, SUBSET} for key in TRAFFIC_DIMENSIONS)
+
+
 def traffic_exact(relations: Dict[str, Relation]) -> bool:
     return all(relations.get(key) == EXACT for key in TRAFFIC_DIMENSIONS)
 
