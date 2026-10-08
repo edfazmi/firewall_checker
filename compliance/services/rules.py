@@ -153,7 +153,7 @@ class RuleEngine:
                 "POL_NO_DESC",
                 target_name,
                 {
-                    "message": f"Policy {target_name} tidak memiliki deskripsi pada field comments.",
+                    "message": f"{target_name} tidak memiliki deskripsi pada field comments.",
                 },
             )
 
@@ -173,7 +173,7 @@ class RuleEngine:
             "POL_OVERLY_PERMISSIVE",
             target_name,
             {
-                "message": f"Policy {target_name} memiliki cakupan address sangat luas pada {' dan '.join(problems)}.",
+                "message": f"{target_name} memiliki cakupan address sangat luas pada {' dan '.join(problems)}.",
                 "problematic_addresses": problems,
             },
         )
@@ -209,7 +209,7 @@ class RuleEngine:
             "POL_ANY_SVC",
             target_name,
             {
-                "message": f"Policy {target_name} menggunakan Service [{', '.join(any_services)}] sehingga mencakup seluruh service.",
+                "message": f"{target_name} menggunakan Service [{', '.join(any_services)}] sehingga mencakup seluruh service.",
                 "problematic_services": any_services,
             },
         )
@@ -259,7 +259,7 @@ class RuleEngine:
                 "POL_NO_LOG",
                 target_name,
                 {
-                    "message": f"Policy {target_name} tidak mengaktifkan logging; nilai logtraffic terdeteksi sebagai [{raw_log_status}].",
+                    "message": f"{target_name} tidak mengaktifkan logging; nilai logtraffic terdeteksi sebagai [{raw_log_status}].",
                     "logtraffic_value": raw_log_status,
                 },
             )
