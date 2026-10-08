@@ -211,20 +211,22 @@ class RuleEngine:
         pol_a: Dict[str, Any],
         action_a: str,
         action_b: str,
-        relations: Dict[str, str],
+        relations: Dict[str, Any],
         target_b_name: str,
         info_json: Dict[str, Any],
     ) -> None:
         if "POL_SHADOWED" not in self.active_rules or action_a == action_b:
             return
-        if network_utils.traffic_exact(relations):
+        profile = relations.get("_traffic_profile") or {}
+        if profile.get("conflict_overlap"):
             return
-        if network_utils.traffic_covers(relations):
-            message = f"Policy B tertimpa seluruhnya oleh Policy ID {pol_a['id']} yang berada lebih awal dan mencakup seluruh trafik Policy B dengan action berbeda."
-            shadow_type = "FULL_SCOPE"
-        elif network_utils.traffic_partially_shadowed(relations):
-            message = f"Sebagian trafik Policy B tertimpa oleh Policy ID {pol_a['id']} yang berada lebih awal karena kedua policy memiliki irisan cakupan dengan hubungan subset dan superset pada dimensi trafik yang berbeda."
-            shadow_type = "PARTIAL_SCOPE"
+        if profile.get("b_specific_overlap"):
+            if network_utils.traffic_covers(relations):
+                message = f"Policy B tertimpa seluruhnya oleh Policy ID {pol_a['id']} yang berada lebih awal karena seluruh trafik Policy B dicakup oleh Policy A dengan action berbeda."
+                shadow_type = "FULL_SCOPE"
+            else:
+                message = f"Sebagian trafik Policy B tertimpa oleh Policy ID {pol_a['id']} yang berada lebih awal karena terdapat bagian trafik Policy B yang dicakup oleh Policy A dengan action berbeda."
+                shadow_type = "PARTIAL_SCOPE"
         else:
             return
         self._add_finding(
@@ -277,26 +279,24 @@ class RuleEngine:
         pol_a: Dict[str, Any],
         action_a: str,
         action_b: str,
-        relations: Dict[str, str],
+        relations: Dict[str, Any],
         target_b_name: str,
         info_json: Dict[str, Any],
     ) -> None:
         if "POL_CONFLICT" not in self.active_rules or action_a == action_b:
             return
-        if not network_utils.traffic_intersects(relations):
+        profile = relations.get("_traffic_profile") or {}
+        if not profile.get("conflict_overlap"):
             return
-        if network_utils.traffic_exact(relations):
+        if profile.get("exact_overlap"):
             conflict_type = "EXACT_SCOPE_DIFFERENT_ACTION"
             message = f"Policy memiliki cakupan trafik identik dengan action berbeda dari Policy ID {pol_a['id']}."
-        elif network_utils.traffic_covers(relations):
-            return
-        elif network_utils.traffic_is_subset(relations):
-            return
-        elif network_utils.traffic_partially_shadowed(relations):
-            return
+        elif profile.get("mixed_specificity_overlap"):
+            conflict_type = "MIXED_SPECIFICITY_OVERLAP"
+            message = f"Policy memiliki irisan trafik dengan action berbeda dari Policy ID {pol_a['id']} dan hubungan cakupan berlawanan pada dimensi trafik yang sama-sama beririsan."
         else:
             conflict_type = "PARTIAL_OVERLAP_DIFFERENT_ACTION"
-            message = f"Policy memiliki sebagian cakupan trafik yang beririsan dengan action berbeda dari Policy ID {pol_a['id']} tanpa hubungan cakupan penuh antara kedua policy."
+            message = f"Policy memiliki sebagian cakupan trafik yang beririsan dengan action berbeda dari Policy ID {pol_a['id']} tanpa hubungan exception yang lebih spesifik pada trafik yang beririsan."
         self._add_finding(
             "POL_CONFLICT",
             target_b_name,
@@ -578,7 +578,7 @@ class RuleEngine:
         }
 
     @staticmethod
-    def _compare_policy_pair(pol_a: Dict[str, Any], pol_b: Dict[str, Any]) -> Optional[Dict[str, str]]:
+    def _compare_policy_pair(pol_a: Dict[str, Any], pol_b: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         if not pol_a.get("relational_supported", False) or not pol_b.get("relational_supported", False):
             return None
         relations = network_utils.compare_traffic_dimensions(
@@ -600,6 +600,23 @@ class RuleEngine:
         for key in ("source_interface", "destination_interface", "source_network", "destination_network"):
             if relations.get(key) == network_utils.NONE:
                 return None
+        profile = network_utils.traffic_overlap_profile(
+            pol_a["src_intf"],
+            pol_b["src_intf"],
+            pol_a["dst_intf"],
+            pol_b["dst_intf"],
+            pol_a.get("src_atoms", pol_a["src_scopes"]),
+            pol_b.get("src_atoms", pol_b["src_scopes"]),
+            pol_a.get("dst_atoms", pol_a["dst_scopes"]),
+            pol_b.get("dst_atoms", pol_b["dst_scopes"]),
+            pol_a.get("svc_atoms", pol_a["svc_scopes"]),
+            pol_b.get("svc_atoms", pol_b["svc_scopes"]),
+            pol_a["schedule"],
+            pol_b["schedule"],
+        )
+        if not profile.get("intersects"):
+            return None
+        relations["_traffic_profile"] = profile
         return relations
 
     def _process_policy_pair(
@@ -612,7 +629,9 @@ class RuleEngine:
         name_b = f"Policy ID {pol_b['id']} ({pol_b['name']})"
         act_a = pol_a["action"]
         act_b = pol_b["action"]
-        combined = network_utils.combine_relations(list(relations.values()))
+        combined = network_utils.combine_relations(
+            [relations.get(key, network_utils.NONE) for key in network_utils.TRAFFIC_DIMENSIONS]
+        )
         info = {
             "reason": f"Policy A (ID {pol_a['id']}) berada sebelum Policy B (ID {pol_b['id']}) dalam urutan analisis.",
             "relations": {

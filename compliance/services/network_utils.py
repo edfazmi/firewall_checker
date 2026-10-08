@@ -915,6 +915,152 @@ def compare_service_scopes(scopes_a: Iterable[Scope], scopes_b: Iterable[Scope])
     intersects = any(_service_atom_intersection(atom_a, atom_b) for atom_a in a for atom_b in b)
     return _relation_from_set_operations(False, False, intersects)
 
+
+def _name_pair_relations(values_a: Iterable[str], values_b: Iterable[str], universal: str) -> Set[Relation]:
+    a = normalize_names(values_a)
+    b = normalize_names(values_b)
+    if not a or not b:
+        return set()
+    universal = _clean_name(universal).lower()
+    relations: Set[Relation] = set()
+    for value_a in a:
+        for value_b in b:
+            a_lower = value_a.lower()
+            b_lower = value_b.lower()
+            if universal and a_lower == universal and b_lower == universal:
+                relations.add(EXACT)
+            elif universal and a_lower == universal:
+                relations.add(SUPERSET)
+            elif universal and b_lower == universal:
+                relations.add(SUBSET)
+            elif a_lower == b_lower:
+                relations.add(EXACT)
+    return relations
+
+
+def _address_pair_relations(scopes_a: Iterable[Scope], scopes_b: Iterable[Scope]) -> Set[Relation]:
+    a = _normalize_address_atoms(scopes_a)
+    b = _normalize_address_atoms(scopes_b)
+    relations: Set[Relation] = set()
+    if not a or not b:
+        return relations
+    for atom_a in a:
+        for atom_b in b:
+            if not _atom_intersection(atom_a, atom_b):
+                continue
+            relations.add(
+                _relation_from_set_operations(
+                    _atom_covers(atom_a, atom_b),
+                    _atom_covers(atom_b, atom_a),
+                    True,
+                )
+            )
+    return relations
+
+
+def _service_pair_relations(scopes_a: Iterable[Scope], scopes_b: Iterable[Scope]) -> Set[Relation]:
+    a = _normalize_service_atoms(scopes_a)
+    b = _normalize_service_atoms(scopes_b)
+    relations: Set[Relation] = set()
+    if not a or not b:
+        return relations
+    for atom_a in a:
+        for atom_b in b:
+            if not _service_atom_intersection(atom_a, atom_b):
+                continue
+            relations.add(
+                _relation_from_set_operations(
+                    _service_atom_covers(atom_a, atom_b),
+                    _service_atom_covers(atom_b, atom_a),
+                    True,
+                )
+            )
+    return relations
+
+
+def traffic_overlap_profile(
+    src_intf_a: Iterable[str],
+    src_intf_b: Iterable[str],
+    dst_intf_a: Iterable[str],
+    dst_intf_b: Iterable[str],
+    src_addr_a: Iterable[Scope],
+    src_addr_b: Iterable[Scope],
+    dst_addr_a: Iterable[Scope],
+    dst_addr_b: Iterable[Scope],
+    svc_a: Iterable[Scope],
+    svc_b: Iterable[Scope],
+    schedule_a: Iterable[str] = ("always",),
+    schedule_b: Iterable[str] = ("always",),
+) -> Dict[str, Any]:
+    dimensions = {
+        "schedule": _name_pair_relations(schedule_a, schedule_b, "always"),
+        "source_interface": _name_pair_relations(src_intf_a, src_intf_b, "any"),
+        "destination_interface": _name_pair_relations(dst_intf_a, dst_intf_b, "any"),
+        "source_network": _address_pair_relations(src_addr_a, src_addr_b),
+        "destination_network": _address_pair_relations(dst_addr_a, dst_addr_b),
+        "service": _service_pair_relations(svc_a, svc_b),
+    }
+    if any(not relations for relations in dimensions.values()):
+        return {
+            "intersects": False,
+            "exact_overlap": False,
+            "a_specific_overlap": False,
+            "b_specific_overlap": False,
+            "a_broader_overlap": False,
+            "mixed_specificity_overlap": False,
+            "partial_atom_overlap": False,
+            "conflict_overlap": False,
+            "full_shadow": False,
+            "partial_shadow": False,
+            "dimensions": dimensions,
+        }
+
+    exact_overlap = all(EXACT in relations for relations in dimensions.values())
+    a_specific_overlap = all(
+        relations.intersection({EXACT, SUBSET})
+        for relations in dimensions.values()
+    ) and any(SUBSET in relations for relations in dimensions.values())
+    b_specific_overlap = all(
+        relations.intersection({EXACT, SUPERSET})
+        for relations in dimensions.values()
+    ) and any(SUPERSET in relations for relations in dimensions.values())
+
+    subset_dimensions = [
+        index for index, relations in enumerate(dimensions.values()) if SUBSET in relations
+    ]
+    superset_dimensions = [
+        index for index, relations in enumerate(dimensions.values()) if SUPERSET in relations
+    ]
+    mixed_specificity_overlap = any(
+        subset_index != superset_index
+        for subset_index in subset_dimensions
+        for superset_index in superset_dimensions
+    )
+    partial_atom_overlap = any(OVERLAP in relations for relations in dimensions.values())
+    conflict_overlap = exact_overlap or mixed_specificity_overlap or partial_atom_overlap
+
+    full_shadow = (
+        b_specific_overlap
+        and not conflict_overlap
+        and not a_specific_overlap
+        and not exact_overlap
+    )
+    partial_shadow = b_specific_overlap and not full_shadow and not conflict_overlap
+
+    return {
+        "intersects": True,
+        "exact_overlap": exact_overlap,
+        "a_specific_overlap": a_specific_overlap,
+        "b_specific_overlap": b_specific_overlap,
+        "a_broader_overlap": b_specific_overlap,
+        "mixed_specificity_overlap": mixed_specificity_overlap,
+        "partial_atom_overlap": partial_atom_overlap,
+        "conflict_overlap": conflict_overlap,
+        "full_shadow": full_shadow,
+        "partial_shadow": partial_shadow,
+        "dimensions": dimensions,
+    }
+
 def compare_traffic_dimensions(
     src_intf_a: Iterable[str],
     src_intf_b: Iterable[str],
