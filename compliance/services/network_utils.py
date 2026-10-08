@@ -978,6 +978,15 @@ def traffic_is_subset(relations: Dict[str, Relation]) -> bool:
     return all(relations.get(key) in {EXACT, SUBSET} for key in TRAFFIC_DIMENSIONS)
 
 
+def traffic_partially_shadowed(relations: Dict[str, Relation]) -> bool:
+    if not traffic_intersects(relations) or traffic_exact(relations):
+        return False
+    values = [relations.get(key) for key in TRAFFIC_DIMENSIONS]
+    if any(value not in {EXACT, SUPERSET, SUBSET} for value in values):
+        return False
+    return SUPERSET in values and SUBSET in values
+
+
 def traffic_exact(relations: Dict[str, Relation]) -> bool:
     return all(relations.get(key) == EXACT for key in TRAFFIC_DIMENSIONS)
 

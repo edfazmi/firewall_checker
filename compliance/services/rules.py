@@ -219,16 +219,23 @@ class RuleEngine:
             return
         if network_utils.traffic_exact(relations):
             return
-        if not network_utils.traffic_covers(relations):
+        if network_utils.traffic_covers(relations):
+            message = f"Policy B tertimpa seluruhnya oleh Policy ID {pol_a['id']} yang berada lebih awal dan mencakup seluruh trafik Policy B dengan action berbeda."
+            shadow_type = "FULL_SCOPE"
+        elif network_utils.traffic_partially_shadowed(relations):
+            message = f"Sebagian trafik Policy B tertimpa oleh Policy ID {pol_a['id']} yang berada lebih awal karena kedua policy memiliki irisan cakupan dengan hubungan subset dan superset pada dimensi trafik yang berbeda."
+            shadow_type = "PARTIAL_SCOPE"
+        else:
             return
         self._add_finding(
             "POL_SHADOWED",
             target_b_name,
             {
                 **info_json,
-                "message": f"Policy B tertimpa oleh Policy ID {pol_a['id']} yang berada lebih awal dan mencakup seluruh trafik Policy B dengan action berbeda.",
+                "message": message,
                 "related_policy_id": pol_a["id"],
                 "related_policy_name": pol_a["name"],
+                "shadow_type": shadow_type,
             },
         )
 
@@ -284,6 +291,8 @@ class RuleEngine:
         elif network_utils.traffic_covers(relations):
             return
         elif network_utils.traffic_is_subset(relations):
+            return
+        elif network_utils.traffic_partially_shadowed(relations):
             return
         else:
             conflict_type = "PARTIAL_OVERLAP_DIFFERENT_ACTION"
