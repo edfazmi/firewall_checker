@@ -5,6 +5,7 @@ from django.utils import timezone
 from compliance.models import Finding
 from . import network_utils
 
+
 class RuleEngine:
     def __init__(self, scan_record, active_rules: Dict[str, Any], finding_sink=None, finding_batch_size: int = 500, pair_batch_size: int = 250, pair_batch_pause: float = 0.05):
         self.scan_record = scan_record
@@ -48,7 +49,15 @@ class RuleEngine:
 
     def _rule_intf_down(self, intf: Dict[str, Any], intf_name: str, status: str) -> None:
         if status == "down" and "INTF_DOWN" in self.active_rules:
-            self._add_finding("INTF_DOWN", f"Interface {intf_name}", intf)
+            self._add_finding(
+                "INTF_DOWN",
+                f"Interface {intf_name}",
+                {
+                    "message": f"Interface {intf_name} berstatus DOWN sehingga tidak aktif meneruskan trafik.",
+                    "interface": intf,
+                    "status": status,
+                },
+            )
 
     def _rule_intf_no_ip(self, intf: Dict[str, Any], intf_name: str, status: str) -> None:
         if "INTF_NO_IP" not in self.active_rules or status != "up":
@@ -62,11 +71,27 @@ class RuleEngine:
         else:
             ip_text = str(raw_ip).strip()
         if not ip_text:
-            self._add_finding("INTF_NO_IP", f"Interface {intf_name}", intf)
+            self._add_finding(
+                "INTF_NO_IP",
+                f"Interface {intf_name}",
+                {
+                    "message": f"Interface {intf_name} berstatus UP tetapi tidak memiliki alamat IP yang terkonfigurasi.",
+                    "interface": intf,
+                    "ip": None,
+                },
+            )
             return
         first_value = ip_text.replace("/", " ").split()[0]
         if first_value == "0.0.0.0":
-            self._add_finding("INTF_NO_IP", f"Interface {intf_name}", intf)
+            self._add_finding(
+                "INTF_NO_IP",
+                f"Interface {intf_name}",
+                {
+                    "message": f"Interface {intf_name} berstatus UP tetapi alamat IP yang terdeteksi adalah 0.0.0.0.",
+                    "interface": intf,
+                    "ip": ip_text,
+                },
+            )
 
     def _rule_addr_dup_subnet(self, addr_name: str, subnet_key: str, subnets_seen: Dict[str, str]) -> None:
         if "ADDR_DUP_SUBNET" not in self.active_rules:
@@ -76,7 +101,11 @@ class RuleEngine:
             self._add_finding(
                 "ADDR_DUP_SUBNET",
                 f"Address {addr_name}",
-                {"conflict_with": previous_name, "subnet": subnet_key},
+                {
+                    "message": f"Address {addr_name} menggunakan subnet {subnet_key} yang sama dengan Address {previous_name}.",
+                    "conflict_with": previous_name,
+                    "subnet": subnet_key,
+                },
             )
         else:
             subnets_seen[subnet_key] = addr_name
@@ -87,46 +116,103 @@ class RuleEngine:
         ranges = []
         for key in ("tcp-portrange", "tcp_portrange", "udp-portrange", "udp_portrange", "sctp-portrange", "sctp_portrange"):
             ranges.extend(network_utils._parse_port_ranges(svc.get(key)))
-        if any(start == 0 and end == 65535 or start == 1 and end == 65535 for start, end in ranges):
-            self._add_finding("SVC_WIDE_PORT", f"Service {svc_name}", svc)
+        wide_ranges = [
+            (start, end)
+            for start, end in ranges
+            if (start == 0 and end == 65535) or (start == 1 and end == 65535)
+        ]
+        if wide_ranges:
+            protocols = []
+            for key, protocol in (
+                ("tcp-portrange", "TCP"),
+                ("tcp_portrange", "TCP"),
+                ("udp-portrange", "UDP"),
+                ("udp_portrange", "UDP"),
+                ("sctp-portrange", "SCTP"),
+                ("sctp_portrange", "SCTP"),
+            ):
+                if network_utils._parse_port_ranges(svc.get(key)):
+                    protocols.append(protocol)
+            protocols = sorted(set(protocols))
+            protocol_text = ", ".join(protocols) if protocols else "protocol tidak diketahui"
+            range_text = ", ".join(f"{start}-{end}" for start, end in wide_ranges)
+            self._add_finding(
+                "SVC_WIDE_PORT",
+                f"Service {svc_name}",
+                {
+                    "message": f"Service {svc_name} membuka seluruh port {range_text} pada {protocol_text} sehingga cakupan port sangat luas.",
+                    "wide_port_ranges": wide_ranges,
+                    "protocols": protocols,
+                    "service": svc,
+                },
+            )
 
     def _rule_pol_no_desc(self, pol: Dict[str, Any], target_name: str) -> None:
         if "POL_NO_DESC" in self.active_rules and not str(pol.get("comments") or "").strip():
-            self._add_finding("POL_NO_DESC", target_name, pol)
+            self._add_finding(
+                "POL_NO_DESC",
+                target_name,
+                {
+                    "message": f"Policy {target_name} tidak memiliki deskripsi pada field comments.",
+                },
+            )
 
     def _rule_pol_overly_permissive(self, src_addrs: set, dst_addrs: set, target_name: str) -> None:
         if "POL_OVERLY_PERMISSIVE" not in self.active_rules:
             return
-        if any(str(addr).strip().lower() == "all" for addr in src_addrs) or any(
-            str(addr).strip().lower() == "all" for addr in dst_addrs
-        ):
-            self._add_finding(
-                "POL_OVERLY_PERMISSIVE",
-                target_name,
-                {"message": "Policy memiliki cakupan Source atau Destination sangat luas (ANY/ALL)."},
-            )
+        problems = []
+        src_all = sorted({str(addr).strip() for addr in src_addrs if str(addr).strip().lower() == "all"}, key=str.lower)
+        dst_all = sorted({str(addr).strip() for addr in dst_addrs if str(addr).strip().lower() == "all"}, key=str.lower)
+        if src_all:
+            problems.append(f"Source [{', '.join(src_all)}]")
+        if dst_all:
+            problems.append(f"Destination [{', '.join(dst_all)}]")
+        if not problems:
+            return
+        self._add_finding(
+            "POL_OVERLY_PERMISSIVE",
+            target_name,
+            {
+                "message": f"Policy {target_name} memiliki cakupan address sangat luas pada {' dan '.join(problems)}.",
+                "problematic_addresses": problems,
+            },
+        )
 
     def _rule_pol_any_intf(self, src_intf_set: set, dst_intf_set: set, target_name: str) -> None:
         if "POL_ANY_INTF" not in self.active_rules:
             return
-        if any(str(intf).strip().lower() == "any" for intf in src_intf_set) or any(
-            str(intf).strip().lower() == "any" for intf in dst_intf_set
-        ):
-            self._add_finding(
-                "POL_ANY_INTF",
-                target_name,
-                {"message": "Policy menggunakan Incoming atau Outgoing interface ANY sehingga cakupan interface sangat luas."},
-            )
+        problems = []
+        src_any = sorted({str(value).strip() for value in src_intf_set if str(value).strip().lower() == "any"}, key=str.lower)
+        dst_any = sorted({str(value).strip() for value in dst_intf_set if str(value).strip().lower() == "any"}, key=str.lower)
+        if src_any:
+            problems.append(f"Source Interface [{', '.join(src_any)}]")
+        if dst_any:
+            problems.append(f"Destination Interface [{', '.join(dst_any)}]")
+        if not problems:
+            return
+        self._add_finding(
+            "POL_ANY_INTF",
+            target_name,
+            {
+                "message": f"Policy {target_name} menggunakan interface ANY pada {' dan '.join(problems)}, sehingga cakupan interface menjadi sangat luas.",
+                "problematic_interfaces": problems,
+            },
+        )
 
     def _rule_pol_any_svc(self, services_set: set, target_name: str) -> None:
         if "POL_ANY_SVC" not in self.active_rules:
             return
-        if any(str(service).strip().lower() == "all" for service in services_set):
-            self._add_finding(
-                "POL_ANY_SVC",
-                target_name,
-                {"message": "Policy menggunakan Service ALL sehingga mencakup semua service."},
-            )
+        any_services = sorted({str(service).strip() for service in services_set if str(service).strip().lower() == "all"}, key=str.lower)
+        if not any_services:
+            return
+        self._add_finding(
+            "POL_ANY_SVC",
+            target_name,
+            {
+                "message": f"Policy {target_name} menggunakan Service [{', '.join(any_services)}] sehingga mencakup seluruh service.",
+                "problematic_services": any_services,
+            },
+        )
 
     def _rule_pol_unused(self, pol: Dict[str, Any], pol_id: str, hit_dict: Dict[str, Dict[str, Any]]) -> None:
         if "POL_UNUSED" not in self.active_rules or not self._policy_enabled(pol):
@@ -157,7 +243,7 @@ class RuleEngine:
                 "POL_UNUSED",
                 f"Policy ID {pol_id} ({pol.get('name', '')})",
                 {
-                    "message": "Policy aktif tidak memiliki catatan penggunaan yang tersedia dan counter hit bernilai 0.",
+                    "message": f"Policy ID {pol_id} ({pol.get('name', '')}) aktif, tetapi counter hit bernilai 0 dan tidak memiliki waktu penggunaan terakhir yang valid.",
                     "hit_count": 0,
                     "last_used": "N/A",
                 },
@@ -166,12 +252,16 @@ class RuleEngine:
     def _rule_pol_no_log(self, pol: Dict[str, Any], target_name: str) -> None:
         if "POL_NO_LOG" not in self.active_rules:
             return
-        log_status = str(pol.get("logtraffic", "disable")).strip().lower()
+        raw_log_status = pol.get("logtraffic", "disable")
+        log_status = str(raw_log_status).strip().lower()
         if log_status in {"disable", "", "none", "false", "disabled", "0", "off", "no"}:
             self._add_finding(
                 "POL_NO_LOG",
                 target_name,
-                {"message": "Fitur logging dimatikan pada policy ini.", "logtraffic_value": log_status},
+                {
+                    "message": f"Policy {target_name} tidak mengaktifkan logging; nilai logtraffic terdeteksi sebagai [{raw_log_status}].",
+                    "logtraffic_value": raw_log_status,
+                },
             )
 
     @staticmethod
@@ -185,73 +275,120 @@ class RuleEngine:
             "destination_network": relations.get("destination_network", "NONE"),
         }
 
-    def _rule_pol_duplicate(
-        self,
-        pol_a: Dict[str, Any],
-        action_a: str,
-        action_b: str,
-        relations: Dict[str, str],
-        target_b_name: str,
-        info_json: Dict[str, Any],
-    ) -> None:
-        if "POL_DUPLICATE" in self.active_rules and action_a == action_b and network_utils.traffic_exact(relations):
-            self._add_finding(
-                "POL_DUPLICATE",
-                target_b_name,
-                {
-                    **info_json,
-                    "message": "Duplikasi identik terdeteksi.",
-                    "related_policy_id": pol_a["id"],
-                    "related_policy_name": pol_a["name"],
-                },
-            )
-
-    def _rule_pol_shadowed(
-        self,
-        pol_a: Dict[str, Any],
-        action_a: str,
-        action_b: str,
-        relations: Dict[str, Any],
-        target_b_name: str,
-        info_json: Dict[str, Any],
-    ) -> None:
-        if "POL_SHADOWED" not in self.active_rules or action_a == action_b:
-            return
-        profile = relations.get("_traffic_profile") or {}
-        if profile.get("conflict_overlap"):
-            return
-        if profile.get("b_specific_overlap"):
-            if network_utils.traffic_covers(relations):
-                message = f"Policy B tertimpa seluruhnya oleh Policy ID {pol_a['id']} yang berada lebih awal karena seluruh trafik Policy B dicakup oleh Policy A dengan action berbeda."
-                shadow_type = "FULL_SCOPE"
-            else:
-                message = f"Sebagian trafik Policy B tertimpa oleh Policy ID {pol_a['id']} yang berada lebih awal karena terdapat bagian trafik Policy B yang dicakup oleh Policy A dengan action berbeda."
-                shadow_type = "PARTIAL_SCOPE"
-        else:
-            return
-        self._add_finding(
-            "POL_SHADOWED",
-            target_b_name,
-            {
-                **info_json,
-                "message": message,
-                "related_policy_id": pol_a["id"],
-                "related_policy_name": pol_a["name"],
-                "shadow_type": shadow_type,
-            },
-        )
-
     @staticmethod
     def _compact_names(values: Any, limit: int = 4) -> str:
         if isinstance(values, (set, list, tuple)):
             items = sorted({str(value).strip() for value in values if str(value).strip()}, key=str.lower)
         else:
-            items = [str(values).strip()] if str(values).strip() else []
+            text = str(values).strip()
+            items = [text] if text else []
         if not items:
             return "-"
         if len(items) <= limit:
             return ", ".join(items)
         return f"{', '.join(items[:limit])}, +{len(items) - limit} lainnya"
+
+    @classmethod
+    def _dimension_label(cls, dimension: str) -> str:
+        return {
+            "schedule": "Schedule",
+            "source_interface": "Source Interface",
+            "destination_interface": "Destination Interface",
+            "source_network": "Source",
+            "destination_network": "Destination",
+            "service": "Service",
+        }.get(dimension, dimension)
+
+    @classmethod
+    def _dimension_values(cls, pol: Dict[str, Any], dimension: str) -> Any:
+        mapping = {
+            "schedule": "schedule",
+            "source_interface": "src_intf",
+            "destination_interface": "dst_intf",
+            "source_network": "src_addrs",
+            "destination_network": "dst_addrs",
+            "service": "services",
+        }
+        return pol.get(mapping[dimension], set())
+
+    @classmethod
+    def _format_relation_detail(
+        cls,
+        pol_a: Dict[str, Any],
+        pol_b: Dict[str, Any],
+        dimension: str,
+        relation: str,
+    ) -> Optional[str]:
+        if relation == network_utils.EXACT:
+            return None
+        label = cls._dimension_label(dimension)
+        values_a = cls._compact_names(cls._dimension_values(pol_a, dimension))
+        values_b = cls._compact_names(cls._dimension_values(pol_b, dimension))
+        if relation == network_utils.SUBSET:
+            return f"{label}: cakupan Policy A [{values_a}] lebih sempit dan tercakup oleh Policy B [{values_b}]"
+        if relation == network_utils.SUPERSET:
+            return f"{label}: cakupan Policy A [{values_a}] lebih luas dan mencakup Policy B [{values_b}]"
+        if relation == network_utils.OVERLAP:
+            return f"{label}: cakupan Policy A [{values_a}] beririsan dengan Policy B [{values_b}]"
+        return None
+
+    @classmethod
+    def _format_exact_details(cls, pol_a: Dict[str, Any], relations: Dict[str, Any]) -> List[str]:
+        details = []
+        for dimension in network_utils.TRAFFIC_DIMENSIONS:
+            if relations.get(dimension) != network_utils.EXACT:
+                continue
+            label = cls._dimension_label(dimension)
+            values = cls._compact_names(cls._dimension_values(pol_a, dimension))
+            details.append(f"{label}: [{values}]")
+        return details
+
+    @classmethod
+    def _format_shadow_details(
+        cls,
+        pol_a: Dict[str, Any],
+        pol_b: Dict[str, Any],
+        relations: Dict[str, Any],
+        full_scope: bool,
+    ) -> List[str]:
+        details = []
+        for dimension in network_utils.TRAFFIC_DIMENSIONS:
+            relation = relations.get(dimension, network_utils.NONE)
+            label = cls._dimension_label(dimension)
+            values_a = cls._compact_names(cls._dimension_values(pol_a, dimension))
+            values_b = cls._compact_names(cls._dimension_values(pol_b, dimension))
+            if relation == network_utils.SUPERSET:
+                details.append(f"{label}: [{values_a}] mencakup [{values_b}]")
+            elif relation == network_utils.OVERLAP:
+                details.append(f"{label}: [{values_a}] beririsan dengan [{values_b}]")
+            elif relation == network_utils.SUBSET and not full_scope:
+                details.append(f"{label}: bagian [{values_a}] beririsan dengan cakupan [{values_b}]")
+        return details
+
+    @classmethod
+    def _format_conflict_details(
+        cls,
+        pol_a: Dict[str, Any],
+        pol_b: Dict[str, Any],
+        relations: Dict[str, Any],
+        exact_overlap: bool,
+    ) -> List[str]:
+        details = []
+        for dimension in network_utils.TRAFFIC_DIMENSIONS:
+            relation = relations.get(dimension, network_utils.NONE)
+            if exact_overlap and relation == network_utils.EXACT:
+                label = cls._dimension_label(dimension)
+                values = cls._compact_names(cls._dimension_values(pol_a, dimension))
+                details.append(f"{label}: [{values}]")
+            elif not exact_overlap and relation in {
+                network_utils.SUBSET,
+                network_utils.SUPERSET,
+                network_utils.OVERLAP,
+            } and relation != network_utils.EXACT:
+                detail = cls._format_relation_detail(pol_a, pol_b, dimension, relation)
+                if detail:
+                    details.append(detail)
+        return details
 
     @classmethod
     def _redundancy_scope_details(
@@ -261,30 +398,89 @@ class RuleEngine:
         relations: Dict[str, str],
     ) -> List[str]:
         details: List[str] = []
-        fields = (
-            ("schedule", "Schedule", "schedule"),
-            ("source_interface", "Source Interface", "src_intf"),
-            ("destination_interface", "Destination Interface", "dst_intf"),
-            ("source_network", "Source", "src_addrs"),
-            ("destination_network", "Destination", "dst_addrs"),
-            ("service", "Service", "services"),
-        )
-        for relation_key, label, raw_key in fields:
-            relation = relations.get(relation_key)
-            if relation == network_utils.EXACT:
-                continue
+        for dimension in network_utils.TRAFFIC_DIMENSIONS:
+            relation = relations.get(dimension)
             if relation not in {network_utils.SUBSET, network_utils.SUPERSET}:
                 continue
-            values_a = pol_a.get(raw_key, set())
-            values_b = pol_b.get(raw_key, set())
+            label = cls._dimension_label(dimension)
+            values_a = cls._compact_names(cls._dimension_values(pol_a, dimension))
+            values_b = cls._compact_names(cls._dimension_values(pol_b, dimension))
             if relation == network_utils.SUBSET:
-                narrow_name = f"Policy A: {cls._compact_names(values_a)}"
-                broad_name = f"Policy B: {cls._compact_names(values_b)}"
+                details.append(f"{label}: [{values_a}] tercakup oleh [{values_b}]")
             else:
-                narrow_name = f"Policy B: {cls._compact_names(values_b)}"
-                broad_name = f"Policy A: {cls._compact_names(values_a)}"
-            details.append(f"{label}: {narrow_name} tercakup oleh {broad_name}")
+                details.append(f"{label}: [{values_a}] mencakup [{values_b}]")
         return details
+
+    def _rule_pol_duplicate(
+        self,
+        pol_a: Dict[str, Any],
+        action_a: str,
+        action_b: str,
+        relations: Dict[str, str],
+        target_b_name: str,
+        info_json: Dict[str, Any],
+    ) -> None:
+        if "POL_DUPLICATE" not in self.active_rules or action_a != action_b:
+            return
+        if not network_utils.traffic_exact(relations):
+            return
+        details = self._format_exact_details(pol_a, relations)
+        message = (
+            f"Policy ini merupakan duplikasi penuh dari Policy ID {pol_a['id']} ({pol_a['name']}) "
+            f"dengan action yang sama ({action_a.upper()})."
+        )
+        if details:
+            message += " Cakupan yang identik: " + "; ".join(details) + "."
+        self._add_finding(
+            "POL_DUPLICATE",
+            target_b_name,
+            {
+                **info_json,
+                "message": message,
+                "related_policy_id": pol_a["id"],
+                "related_policy_name": pol_a["name"],
+                "duplicate_dimensions": details,
+            },
+        )
+
+    def _rule_pol_shadowed(
+        self,
+        pol_a: Dict[str, Any],
+        pol_b: Dict[str, Any],
+        action_a: str,
+        action_b: str,
+        relations: Dict[str, Any],
+        target_b_name: str,
+        info_json: Dict[str, Any],
+    ) -> None:
+        if "POL_SHADOWED" not in self.active_rules or action_a == action_b:
+            return
+        profile = relations.get("_traffic_profile") or {}
+        if profile.get("conflict_overlap") or not profile.get("b_specific_overlap"):
+            return
+        full_scope = network_utils.traffic_covers(relations)
+        shadow_type = "FULL_SCOPE" if full_scope else "PARTIAL_SCOPE"
+        scope_word = "seluruh" if full_scope else "sebagian"
+        message = (
+            f"{scope_word.capitalize()} trafik Policy ID {pol_b['id']} ({pol_b['name']}) "
+            f"tertimpa oleh Policy ID {pol_a['id']} ({pol_a['name']}) yang berada lebih awal. "
+            f"Action berbeda: Policy ID {pol_a['id']} = {action_a.upper()}, Policy ID {pol_b['id']} = {action_b.upper()}."
+        )
+        details = self._format_shadow_details(pol_a, pol_b, relations, full_scope)
+        if details:
+            message += " Penyebab cakupan: " + "; ".join(details) + "."
+        self._add_finding(
+            "POL_SHADOWED",
+            target_b_name,
+            {
+                **info_json,
+                "message": message,
+                "related_policy_id": pol_a["id"],
+                "related_policy_name": pol_a["name"],
+                "shadow_type": shadow_type,
+                "shadow_dimensions": details,
+            },
+        )
 
     def _rule_pol_redundant(
         self,
@@ -292,7 +488,7 @@ class RuleEngine:
         pol_b: Dict[str, Any],
         action_a: str,
         action_b: str,
-        relations: Dict[str, str],
+        relations: Dict[str, Any],
         target_a_name: str,
         target_b_name: str,
         info_json: Dict[str, Any],
@@ -304,7 +500,11 @@ class RuleEngine:
             return None
         if network_utils.traffic_covers(relations):
             redundant_name = target_b_name
-            message_prefix = f"Policy ID {pol_b['id']} dapat dipertimbangkan dihapus karena seluruh trafiknya sudah dicakup Policy ID {pol_a['id']} yang berada lebih awal dengan action yang sama."
+            message_prefix = (
+                f"Policy ID {pol_b['id']} ({pol_b['name']}) dapat dipertimbangkan dihapus karena "
+                f"seluruh trafiknya sudah dicakup Policy ID {pol_a['id']} ({pol_a['name']}) "
+                f"yang berada lebih awal dengan action yang sama ({action_a.upper()})."
+            )
             direction = "LATER_POLICY_COVERED_BY_EARLIER"
         elif network_utils.traffic_is_subset(relations):
             blocked = False
@@ -319,18 +519,18 @@ class RuleEngine:
             if blocked:
                 return None
             redundant_name = target_a_name
-            message_prefix = f"Policy ID {pol_a['id']} dapat dipertimbangkan dihapus karena seluruh trafiknya sudah dicakup Policy ID {pol_b['id']} yang berada lebih akhir dengan action yang sama."
+            message_prefix = (
+                f"Policy ID {pol_a['id']} ({pol_a['name']}) dapat dipertimbangkan dihapus karena "
+                f"seluruh trafiknya sudah dicakup Policy ID {pol_b['id']} ({pol_b['name']}) "
+                f"yang berada lebih akhir dengan action yang sama ({action_a.upper()})."
+            )
             direction = "EARLIER_POLICY_COVERED_BY_LATER"
         else:
             return None
-        details = self._redundancy_scope_details(
-            pol_a,
-            pol_b,
-            relations,
-        )
+        details = self._redundancy_scope_details(pol_a, pol_b, relations)
         message = message_prefix
         if details:
-            message += " Bagian yang membuat redundan: " + "; ".join(details) + "."
+            message += " Penyebab cakupan: " + "; ".join(details) + "."
         self._add_finding(
             "POL_REDUNDANT",
             redundant_name,
@@ -350,6 +550,7 @@ class RuleEngine:
     def _rule_pol_conflict(
         self,
         pol_a: Dict[str, Any],
+        pol_b: Dict[str, Any],
         action_a: str,
         action_b: str,
         relations: Dict[str, Any],
@@ -361,15 +562,26 @@ class RuleEngine:
         profile = relations.get("_traffic_profile") or {}
         if not profile.get("conflict_overlap"):
             return
-        if profile.get("exact_overlap"):
+        exact_overlap = bool(profile.get("exact_overlap"))
+        if exact_overlap:
             conflict_type = "EXACT_SCOPE_DIFFERENT_ACTION"
-            message = f"Policy memiliki cakupan trafik identik dengan action berbeda dari Policy ID {pol_a['id']}."
         elif profile.get("mixed_specificity_overlap"):
             conflict_type = "MIXED_SPECIFICITY_OVERLAP"
-            message = f"Policy memiliki irisan trafik dengan action berbeda dari Policy ID {pol_a['id']} dan hubungan cakupan berlawanan pada dimensi trafik yang sama-sama beririsan."
         else:
             conflict_type = "PARTIAL_OVERLAP_DIFFERENT_ACTION"
-            message = f"Policy memiliki sebagian cakupan trafik yang beririsan dengan action berbeda dari Policy ID {pol_a['id']} tanpa hubungan exception yang lebih spesifik pada trafik yang beririsan."
+        details = self._format_conflict_details(
+            pol_a,
+            pol_b,
+            relations,
+            exact_overlap,
+        )
+        message = (
+            f"Policy ID {pol_b['id']} ({pol_b['name']}) memiliki konflik dengan "
+            f"Policy ID {pol_a['id']} ({pol_a['name']}) karena action berbeda: "
+            f"Policy A = {action_a.upper()}, Policy B = {action_b.upper()}."
+        )
+        if details:
+            message += " Bagian yang menyebabkan irisan: " + "; ".join(details) + "."
         self._add_finding(
             "POL_CONFLICT",
             target_b_name,
@@ -379,6 +591,7 @@ class RuleEngine:
                 "related_policy_id": pol_a["id"],
                 "related_policy_name": pol_a["name"],
                 "conflict_type": conflict_type,
+                "conflict_dimensions": details,
             },
         )
 
@@ -395,28 +608,38 @@ class RuleEngine:
     ) -> None:
         if "POL_POTENTIALLY_MERGE" not in self.active_rules or action_a != action_b:
             return
-        if not (
-            relations.get("schedule") == network_utils.EXACT
-            and relations.get("source_interface") == network_utils.EXACT
-            and relations.get("destination_interface") == network_utils.EXACT
-        ):
+        required_exact = (
+            "schedule",
+            "source_interface",
+            "destination_interface",
+            "source_network",
+            "destination_network",
+        )
+        if not all(relations.get(key) == network_utils.EXACT for key in required_exact):
             return
-        if relations.get("source_network") != network_utils.EXACT or relations.get("destination_network") != network_utils.EXACT:
+        if relations.get("service") != network_utils.OVERLAP:
             return
-        service_relation = relations.get("service")
-        if service_relation != network_utils.OVERLAP:
-            return
+        service_a = self._compact_names(pol_a.get("services", set()))
+        service_b = self._compact_names(pol_b.get("services", set()))
+        message = (
+            f"Policy ID {pol_a['id']} ({pol_a['name']}) dan Policy ID {pol_b['id']} ({pol_b['name']}) "
+            f"memiliki action yang sama ({action_a.upper()}) dan cakupan Source, Destination, "
+            f"Interface, serta Schedule yang identik. Perbedaan yang menyebabkan potensi merge "
+            f"terdapat pada Service: Policy A [{service_a}] dan Policy B [{service_b}] beririsan."
+        )
         self._add_finding(
             "POL_POTENTIALLY_MERGE",
             target_b_name,
             {
                 **info_json,
-                "message": "Berpotensi digabung. Interface sama, cakupan Source dan Destination identik, saling mencakup, atau beririsan, sedangkan cakupan service berbeda atau beririsan.",
+                "message": message,
                 "related_policy_id": pol_a["id"],
                 "related_policy_name": pol_a["name"],
                 "merge_with_policy_id": pol_b["id"],
                 "merge_with_policy_name": pol_b["name"],
-                "service_relationship": service_relation,
+                "service_relationship": relations.get("service"),
+                "service_policy_a": service_a,
+                "service_policy_b": service_b,
                 "suggested_action": "Pertimbangkan menggabungkan service kedua policy menjadi satu policy setelah memastikan kebutuhan akses tetap terpenuhi.",
             },
         )
@@ -505,13 +728,14 @@ class RuleEngine:
             last_used = timezone.make_aware(last_used, timezone.get_current_timezone())
         elapsed = timezone.now() - last_used
         if elapsed.total_seconds() >= 30 * 24 * 60 * 60:
+            elapsed_days = round(elapsed.total_seconds() / 86400, 2)
             self._add_finding(
                 "POL_NOT_USED_1MONTH",
                 f"Policy ID {pol_id} ({pol.get('name', '')})",
                 {
-                    "message": "Policy aktif tidak digunakan selama minimal 30 hari berdasarkan waktu terakhir digunakan.",
+                    "message": f"Policy ID {pol_id} ({pol.get('name', '')}) aktif tetapi tidak digunakan selama {elapsed_days} hari sejak penggunaan terakhir.",
                     "last_used": str(raw_last_used),
-                    "elapsed_days": round(elapsed.total_seconds() / 86400, 2),
+                    "elapsed_days": elapsed_days,
                 },
             )
 
@@ -712,9 +936,9 @@ class RuleEngine:
         }
         self._rule_pol_potentially_merge(pol_a, pol_b, act_a, act_b, relations, name_a, name_b, info)
         self._rule_pol_duplicate(pol_a, act_a, act_b, relations, name_b, info)
-        self._rule_pol_shadowed(pol_a, act_a, act_b, relations, name_b, info)
+        self._rule_pol_shadowed(pol_a, pol_b, act_a, act_b, relations, name_b, info)
         self._rule_pol_redundant(pol_a, pol_b, act_a, act_b, relations, name_a, name_b, info, intermediate_policies)
-        self._rule_pol_conflict(pol_a, act_a, act_b, relations, name_b, info)
+        self._rule_pol_conflict(pol_a, pol_b, act_a, act_b, relations, name_b, info)
 
     def _check_policies_and_relationships(
         self,
