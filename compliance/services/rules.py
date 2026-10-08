@@ -194,7 +194,7 @@ class RuleEngine:
             "POL_ANY_INTF",
             target_name,
             {
-                "message": f"Policy {target_name} menggunakan interface ANY pada {' dan '.join(problems)}, sehingga cakupan interface menjadi sangat luas.",
+                "message": f"{target_name} menggunakan interface ANY pada {' dan '.join(problems)}, sehingga cakupan interface menjadi sangat luas.",
                 "problematic_interfaces": problems,
             },
         )
