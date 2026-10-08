@@ -51,11 +51,21 @@ class RuleEngine:
             self._add_finding("INTF_DOWN", f"Interface {intf_name}", intf)
 
     def _rule_intf_no_ip(self, intf: Dict[str, Any], intf_name: str, status: str) -> None:
-        if (
-            "INTF_NO_IP" in self.active_rules
-            and status == "up"
-            and str(intf.get("ip", "0.0.0.0 0.0.0.0")).strip() == "0.0.0.0 0.0.0.0"
-        ):
+        if "INTF_NO_IP" not in self.active_rules or status != "up":
+            return
+        raw_ip = intf.get("ip", intf.get("ipv4", intf.get("address")))
+        if raw_ip is None:
+            return
+        if isinstance(raw_ip, (list, tuple, set)):
+            values = [str(value).strip() for value in raw_ip if str(value).strip()]
+            ip_text = values[0] if values else ""
+        else:
+            ip_text = str(raw_ip).strip()
+        if not ip_text:
+            self._add_finding("INTF_NO_IP", f"Interface {intf_name}", intf)
+            return
+        first_value = ip_text.replace("/", " ").split()[0]
+        if first_value == "0.0.0.0":
             self._add_finding("INTF_NO_IP", f"Interface {intf_name}", intf)
 
     def _rule_addr_dup_subnet(self, addr_name: str, subnet_key: str, subnets_seen: Dict[str, str]) -> None:
@@ -81,7 +91,7 @@ class RuleEngine:
             self._add_finding("SVC_WIDE_PORT", f"Service {svc_name}", svc)
 
     def _rule_pol_no_desc(self, pol: Dict[str, Any], target_name: str) -> None:
-        if "POL_NO_DESC" in self.active_rules and not str(pol.get("comments", "")).strip():
+        if "POL_NO_DESC" in self.active_rules and not str(pol.get("comments") or "").strip():
             self._add_finding("POL_NO_DESC", target_name, pol)
 
     def _rule_pol_overly_permissive(self, src_addrs: set, dst_addrs: set, target_name: str) -> None:
@@ -119,15 +129,23 @@ class RuleEngine:
             )
 
     def _rule_pol_unused(self, pol: Dict[str, Any], pol_id: str, hit_dict: Dict[str, Dict[str, Any]]) -> None:
-        if "POL_UNUSED" not in self.active_rules or str(pol.get("status", "enable")).strip().lower() == "disable":
+        if "POL_UNUSED" not in self.active_rules or not self._policy_enabled(pol):
             return
         hit_data = hit_dict.get(pol_id)
         if not isinstance(hit_data, dict):
             return
-        raw_hit_count = hit_data.get("hit_count", hit_data.get("hit-count", hit_data.get("packets")))
+        raw_hit_count = None
+        for key in ("hit_count", "hit-count", "packets"):
+            if key in hit_data and hit_data.get(key) not in (None, ""):
+                raw_hit_count = hit_data.get(key)
+                break
+        if raw_hit_count is None:
+            return
         try:
-            hit_count = int(raw_hit_count or 0)
+            hit_count = int(str(raw_hit_count).strip())
         except (TypeError, ValueError):
+            return
+        if hit_count < 0:
             return
         raw_last_used = None
         for key in ("last_used", "last-used", "last_hit", "last-hit", "last_hit_time", "last-hit-time", "last_used_time", "last-used-time"):
@@ -149,7 +167,7 @@ class RuleEngine:
         if "POL_NO_LOG" not in self.active_rules:
             return
         log_status = str(pol.get("logtraffic", "disable")).strip().lower()
-        if log_status in {"disable", "", "none", "false", "disabled"}:
+        if log_status in {"disable", "", "none", "false", "disabled", "0", "off", "no"}:
             self._add_finding(
                 "POL_NO_LOG",
                 target_name,
@@ -228,6 +246,7 @@ class RuleEngine:
         if "POL_REDUNDANT" not in self.active_rules or action_a != action_b:
             return
         covering_relations = {
+            relations.get("schedule"),
             relations.get("source_interface"),
             relations.get("destination_interface"),
             relations.get("source_network"),
@@ -264,11 +283,6 @@ class RuleEngine:
             message = f"Policy memiliki cakupan trafik identik dengan action berbeda dari Policy ID {pol_a['id']}."
         elif network_utils.traffic_covers(relations):
             return
-        elif all(
-            relation in {network_utils.EXACT, network_utils.SUBSET}
-            for relation in relations.values()
-        ):
-            return
         else:
             conflict_type = "PARTIAL_OVERLAP_DIFFERENT_ACTION"
             message = f"Policy memiliki sebagian cakupan trafik yang beririsan dengan action berbeda dari Policy ID {pol_a['id']} tanpa hubungan cakupan penuh antara kedua policy."
@@ -303,18 +317,7 @@ class RuleEngine:
             and relations.get("destination_interface") == network_utils.EXACT
         ):
             return
-        network_relations = {
-            relations.get("source_network"),
-            relations.get("destination_network"),
-        }
-        if network_utils.NONE in network_relations:
-            return
-        if not network_relations.issubset({
-            network_utils.EXACT,
-            network_utils.SUPERSET,
-            network_utils.SUBSET,
-            network_utils.OVERLAP,
-        }):
+        if relations.get("source_network") != network_utils.EXACT or relations.get("destination_network") != network_utils.EXACT:
             return
         service_relation = relations.get("service")
         if service_relation not in {
@@ -348,9 +351,9 @@ class RuleEngine:
             intf_name = str(intf.get("name", "Unknown")).strip() or "Unknown"
             status = str(intf.get("status", "")).strip().lower()
             if not status:
-                status = str(intf.get("link", "down")).strip().lower()
+                status = str(intf.get("link", intf.get("link-status", ""))).strip().lower()
             if status not in {"up", "down"}:
-                status = "down"
+                continue
             self._rule_intf_down(intf, intf_name, status)
             self._rule_intf_no_ip(intf, intf_name, status)
 
@@ -388,6 +391,12 @@ class RuleEngine:
         text = str(value).strip()
         if not text:
             return None
+        try:
+            numeric = float(text)
+            if numeric >= 0:
+                return datetime.fromtimestamp(numeric, tz=timezone.get_current_timezone())
+        except (TypeError, ValueError, OverflowError, OSError):
+            pass
         candidates = [text, text.replace("Z", "+00:00")]
         for candidate in candidates:
             try:
@@ -432,11 +441,13 @@ class RuleEngine:
             return
         if not any(code in self.active_rules for code in ("POL_UNUSED", "POL_NOT_USED_1MONTH")):
             return
-        hit_dict = {
-            str(hit["policyid"]): hit
-            for hit in policy_hits
-            if isinstance(hit, dict) and hit.get("policyid") is not None
-        }
+        hit_dict = {}
+        for hit in policy_hits:
+            if not isinstance(hit, dict):
+                continue
+            raw_id = hit.get("policyid", hit.get("policy-id"))
+            if raw_id is not None and str(raw_id).strip():
+                hit_dict[str(raw_id).strip()] = hit
         for pol in policies:
             if not isinstance(pol, dict):
                 continue
@@ -578,8 +589,6 @@ class RuleEngine:
         for key in ("source_interface", "destination_interface", "source_network", "destination_network"):
             if relations.get(key) == network_utils.NONE:
                 return None
-        if relations.get("service") == network_utils.NONE:
-            return None
         return relations
 
     def _process_policy_pair(

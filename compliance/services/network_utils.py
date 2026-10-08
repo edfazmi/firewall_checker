@@ -451,26 +451,64 @@ def _atom_covers(atom_a: Scope, atom_b: Scope) -> bool:
     return False
 
 
+def _normalize_address_atoms(scopes: Iterable[Scope]) -> List[Scope]:
+    atoms: List[Scope] = []
+    for scope in scopes or ():
+        if isinstance(scope, dict) and scope.get("kind") in {"atom-set", "network-set"}:
+            atoms.extend(_flatten_scope(scope))
+        elif isinstance(scope, dict):
+            atoms.append(scope)
+    if not atoms:
+        return []
+    networks = [atom["value"] for atom in atoms if atom.get("kind") == "network" and isinstance(atom.get("value"), ipaddress.IPv4Network)]
+    countries: Set[str] = set()
+    mac_ranges: List[Tuple[int, int]] = []
+    other: List[Scope] = []
+    for atom in atoms:
+        kind = atom.get("kind")
+        if kind == "network":
+            continue
+        if kind == "geography":
+            countries.update(atom.get("value", ()))
+            continue
+        if kind == "mac" and isinstance(atom.get("value"), tuple) and len(atom["value"]) == 2:
+            mac_ranges.append(tuple(atom["value"]))
+            continue
+        other.append(atom)
+    normalized: List[Scope] = [_make_scope("network", net) for net in ipaddress.collapse_addresses(networks)]
+    if countries:
+        normalized.append(_make_scope("geography", tuple(sorted(countries))))
+    if mac_ranges:
+        mac_ranges.sort()
+        merged: List[List[int]] = []
+        for start, end in mac_ranges:
+            if not merged or start > merged[-1][1] + 1:
+                merged.append([start, end])
+            else:
+                merged[-1][1] = max(merged[-1][1], end)
+        normalized.extend(_make_scope("mac", (start, end)) for start, end in merged)
+    normalized.extend(other)
+    unique: List[Scope] = []
+    seen: Set[str] = set()
+    for atom in normalized:
+        key = repr(atom)
+        if key not in seen:
+            unique.append(atom)
+            seen.add(key)
+    return unique
+
+
 def compare_address_scopes(scopes_a: Iterable[Scope], scopes_b: Iterable[Scope]) -> Relation:
-    a: List[Scope] = []
-    b: List[Scope] = []
-    for scope in scopes_a or ():
-        if isinstance(scope, dict) and scope.get("kind") in {"atom-set", "network-set"}:
-            a.extend(_flatten_scope(scope))
-        elif isinstance(scope, dict):
-            a.append(scope)
-    for scope in scopes_b or ():
-        if isinstance(scope, dict) and scope.get("kind") in {"atom-set", "network-set"}:
-            b.extend(_flatten_scope(scope))
-        elif isinstance(scope, dict):
-            b.append(scope)
+    raw_a = tuple(scopes_a or ())
+    raw_b = tuple(scopes_b or ())
+    if not raw_a or not raw_b:
+        return NONE
+    if len(raw_a) == len(raw_b) and {repr(atom) for atom in raw_a} == {repr(atom) for atom in raw_b}:
+        return EXACT
+    a = _normalize_address_atoms(raw_a)
+    b = _normalize_address_atoms(raw_b)
     if not a or not b:
         return NONE
-    if len(a) == len(b):
-        a_keys = {repr(atom) for atom in a}
-        b_keys = {repr(atom) for atom in b}
-        if a_keys == b_keys:
-            return EXACT
     a_covers_b = all(any(_atom_covers(atom_a, atom_b) for atom_a in a) for atom_b in b)
     b_covers_a = all(any(_atom_covers(atom_b, atom_a) for atom_b in b) for atom_a in a)
     if a_covers_b and b_covers_a:
@@ -481,7 +519,6 @@ def compare_address_scopes(scopes_a: Iterable[Scope], scopes_b: Iterable[Scope])
         return SUBSET
     intersects = any(_atom_intersection(atom_a, atom_b) for atom_a in a for atom_b in b)
     return _relation_from_set_operations(False, False, intersects)
-
 
 def get_networks_from_names(names_list: Iterable[str], address_map: Dict[str, Scope]) -> List[Network]:
     scopes = get_address_scopes_from_names(names_list, address_map)
@@ -832,29 +869,41 @@ def _service_atom_covers(atom_a: Tuple[str, int, int], atom_b: Tuple[str, int, i
     return protocol_ok and start_a <= start_b and end_b <= end_a
 
 
+def _normalize_service_atoms(scopes: Iterable[Scope]) -> List[Tuple[str, int, int]]:
+    atoms: List[Tuple[str, int, int]] = []
+    for scope in scopes or ():
+        if isinstance(scope, dict):
+            if scope.get("kind") == "service-set":
+                atoms.extend(_flatten_service_scope(scope))
+            elif scope.get("kind") == "service-atom" and isinstance(scope.get("value"), tuple):
+                atoms.append(scope["value"])
+        elif isinstance(scope, tuple) and len(scope) == 3:
+            atoms.append(scope)
+    if not atoms:
+        return []
+    if any(protocol == "any" and start == 0 and end == 65535 for protocol, start, end in atoms):
+        return [("any", 0, 65535)]
+    grouped: Dict[str, List[Tuple[int, int]]] = {}
+    for protocol, start, end in atoms:
+        grouped.setdefault(str(protocol).lower(), []).append((int(start), int(end)))
+    normalized: List[Tuple[str, int, int]] = []
+    for protocol, ranges in grouped.items():
+        for start, end in _merge_ranges(ranges):
+            normalized.append((protocol, start, end))
+    return sorted(set(normalized))
+
+
 def compare_service_scopes(scopes_a: Iterable[Scope], scopes_b: Iterable[Scope]) -> Relation:
-    a = []
-    b = []
-    for scope in scopes_a or ():
-        if isinstance(scope, dict):
-            if scope.get("kind") == "service-set":
-                a.extend(_flatten_service_scope(scope))
-            elif scope.get("kind") == "service-atom" and isinstance(scope.get("value"), tuple):
-                a.append(scope["value"])
-        elif isinstance(scope, tuple) and len(scope) == 3:
-            a.append(scope)
-    for scope in scopes_b or ():
-        if isinstance(scope, dict):
-            if scope.get("kind") == "service-set":
-                b.extend(_flatten_service_scope(scope))
-            elif scope.get("kind") == "service-atom" and isinstance(scope.get("value"), tuple):
-                b.append(scope["value"])
-        elif isinstance(scope, tuple) and len(scope) == 3:
-            b.append(scope)
+    raw_a = tuple(scopes_a or ())
+    raw_b = tuple(scopes_b or ())
+    if not raw_a or not raw_b:
+        return NONE
+    if len(raw_a) == len(raw_b) and {repr(atom) for atom in raw_a} == {repr(atom) for atom in raw_b}:
+        return EXACT
+    a = _normalize_service_atoms(raw_a)
+    b = _normalize_service_atoms(raw_b)
     if not a or not b:
         return NONE
-    if len(a) == len(b) and set(a) == set(b):
-        return EXACT
     a_covers_b = all(any(_service_atom_covers(atom_a, atom_b) for atom_a in a) for atom_b in b)
     b_covers_a = all(any(_service_atom_covers(atom_b, atom_a) for atom_b in b) for atom_a in a)
     if a_covers_b and b_covers_a:
@@ -865,7 +914,6 @@ def compare_service_scopes(scopes_a: Iterable[Scope], scopes_b: Iterable[Scope])
         return SUBSET
     intersects = any(_service_atom_intersection(atom_a, atom_b) for atom_a in a for atom_b in b)
     return _relation_from_set_operations(False, False, intersects)
-
 
 def compare_traffic_dimensions(
     src_intf_a: Iterable[str],
