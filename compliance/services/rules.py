@@ -241,6 +241,51 @@ class RuleEngine:
             },
         )
 
+    @staticmethod
+    def _compact_names(values: Any, limit: int = 4) -> str:
+        if isinstance(values, (set, list, tuple)):
+            items = sorted({str(value).strip() for value in values if str(value).strip()}, key=str.lower)
+        else:
+            items = [str(values).strip()] if str(values).strip() else []
+        if not items:
+            return "-"
+        if len(items) <= limit:
+            return ", ".join(items)
+        return f"{', '.join(items[:limit])}, +{len(items) - limit} lainnya"
+
+    @classmethod
+    def _redundancy_scope_details(
+        cls,
+        pol_a: Dict[str, Any],
+        pol_b: Dict[str, Any],
+        relations: Dict[str, str],
+    ) -> List[str]:
+        details: List[str] = []
+        fields = (
+            ("schedule", "Schedule", "schedule"),
+            ("source_interface", "Source Interface", "src_intf"),
+            ("destination_interface", "Destination Interface", "dst_intf"),
+            ("source_network", "Source", "src_addrs"),
+            ("destination_network", "Destination", "dst_addrs"),
+            ("service", "Service", "services"),
+        )
+        for relation_key, label, raw_key in fields:
+            relation = relations.get(relation_key)
+            if relation == network_utils.EXACT:
+                continue
+            if relation not in {network_utils.SUBSET, network_utils.SUPERSET}:
+                continue
+            values_a = pol_a.get(raw_key, set())
+            values_b = pol_b.get(raw_key, set())
+            if relation == network_utils.SUBSET:
+                narrow_name = f"Policy A: {cls._compact_names(values_a)}"
+                broad_name = f"Policy B: {cls._compact_names(values_b)}"
+            else:
+                narrow_name = f"Policy B: {cls._compact_names(values_b)}"
+                broad_name = f"Policy A: {cls._compact_names(values_a)}"
+            details.append(f"{label}: {narrow_name} tercakup oleh {broad_name}")
+        return details
+
     def _rule_pol_redundant(
         self,
         pol_a: Dict[str, Any],
@@ -251,28 +296,56 @@ class RuleEngine:
         target_a_name: str,
         target_b_name: str,
         info_json: Dict[str, Any],
-    ) -> None:
+        intermediate_policies: Optional[List[Dict[str, Any]]] = None,
+    ) -> Optional[str]:
         if "POL_REDUNDANT" not in self.active_rules or action_a != action_b:
-            return
-        covering_relations = {
-            relations.get("schedule"),
-            relations.get("source_interface"),
-            relations.get("destination_interface"),
-            relations.get("source_network"),
-            relations.get("destination_network"),
-            relations.get("service"),
-        }
-        if covering_relations.issubset({network_utils.EXACT, network_utils.SUPERSET}) and not network_utils.traffic_exact(relations):
-            self._add_finding(
-                "POL_REDUNDANT",
-                target_b_name,
-                {
-                    **info_json,
-                    "message": f"Redundant. Policy B dicakup penuh oleh Policy ID {pol_a['id']} yang lebih luas dengan action yang sama.",
-                    "related_policy_id": pol_a["id"],
-                    "related_policy_name": pol_a["name"],
-                },
-            )
+            return None
+        if network_utils.traffic_exact(relations):
+            return None
+        if network_utils.traffic_covers(relations):
+            redundant_name = target_b_name
+            message_prefix = f"Policy ID {pol_b['id']} dapat dipertimbangkan dihapus karena seluruh trafiknya sudah dicakup Policy ID {pol_a['id']} yang berada lebih awal dengan action yang sama."
+            direction = "LATER_POLICY_COVERED_BY_EARLIER"
+        elif network_utils.traffic_is_subset(relations):
+            blocked = False
+            if intermediate_policies:
+                for middle in intermediate_policies:
+                    if middle.get("action") == action_a:
+                        continue
+                    middle_relations = self._compare_policy_pair(pol_a, middle)
+                    if middle_relations:
+                        blocked = True
+                        break
+            if blocked:
+                return None
+            redundant_name = target_a_name
+            message_prefix = f"Policy ID {pol_a['id']} dapat dipertimbangkan dihapus karena seluruh trafiknya sudah dicakup Policy ID {pol_b['id']} yang berada lebih akhir dengan action yang sama."
+            direction = "EARLIER_POLICY_COVERED_BY_LATER"
+        else:
+            return None
+        details = self._redundancy_scope_details(
+            pol_a,
+            pol_b,
+            relations,
+        )
+        message = message_prefix
+        if details:
+            message += " Bagian yang membuat redundan: " + "; ".join(details) + "."
+        self._add_finding(
+            "POL_REDUNDANT",
+            redundant_name,
+            {
+                **info_json,
+                "message": message,
+                "related_policy_id": pol_b["id"] if direction == "EARLIER_POLICY_COVERED_BY_LATER" else pol_a["id"],
+                "related_policy_name": pol_b["name"] if direction == "EARLIER_POLICY_COVERED_BY_LATER" else pol_a["name"],
+                "redundancy_direction": direction,
+                "redundant_policy_id": pol_a["id"] if direction == "EARLIER_POLICY_COVERED_BY_LATER" else pol_b["id"],
+                "redundant_policy_name": pol_a["name"] if direction == "EARLIER_POLICY_COVERED_BY_LATER" else pol_b["name"],
+                "redundant_dimensions": details,
+            },
+        )
+        return direction
 
     def _rule_pol_conflict(
         self,
@@ -331,12 +404,7 @@ class RuleEngine:
         if relations.get("source_network") != network_utils.EXACT or relations.get("destination_network") != network_utils.EXACT:
             return
         service_relation = relations.get("service")
-        if service_relation not in {
-            network_utils.SUPERSET,
-            network_utils.SUBSET,
-            network_utils.OVERLAP,
-            network_utils.NONE,
-        }:
+        if service_relation != network_utils.OVERLAP:
             return
         self._add_finding(
             "POL_POTENTIALLY_MERGE",
@@ -565,6 +633,8 @@ class RuleEngine:
             "src_intf": src_intf,
             "dst_intf": dst_intf,
             "services": services,
+            "src_addrs": src_addrs,
+            "dst_addrs": dst_addrs,
             "schedule": schedule,
             "src_scopes": src_scopes,
             "dst_scopes": dst_scopes,
@@ -624,6 +694,7 @@ class RuleEngine:
         pol_a: Dict[str, Any],
         pol_b: Dict[str, Any],
         relations: Dict[str, str],
+        intermediate_policies: Optional[List[Dict[str, Any]]] = None,
     ) -> None:
         name_a = f"Policy ID {pol_a['id']} ({pol_a['name']})"
         name_b = f"Policy ID {pol_b['id']} ({pol_b['name']})"
@@ -642,7 +713,7 @@ class RuleEngine:
         self._rule_pol_potentially_merge(pol_a, pol_b, act_a, act_b, relations, name_a, name_b, info)
         self._rule_pol_duplicate(pol_a, act_a, act_b, relations, name_b, info)
         self._rule_pol_shadowed(pol_a, act_a, act_b, relations, name_b, info)
-        self._rule_pol_redundant(pol_a, pol_b, act_a, act_b, relations, name_a, name_b, info)
+        self._rule_pol_redundant(pol_a, pol_b, act_a, act_b, relations, name_a, name_b, info, intermediate_policies)
         self._rule_pol_conflict(pol_a, act_a, act_b, relations, name_b, info)
 
     def _check_policies_and_relationships(
@@ -662,12 +733,13 @@ class RuleEngine:
         for idx_a, pol_a in enumerate(parsed[:-1]):
             if not pol_a.get("relational_supported"):
                 continue
-            for pol_b in parsed[idx_a + 1:]:
+            for idx_b in range(idx_a + 1, len(parsed)):
+                pol_b = parsed[idx_b]
                 if not pol_b.get("relational_supported"):
                     continue
                 relations = self._compare_policy_pair(pol_a, pol_b)
                 if relations:
-                    self._process_policy_pair(pol_a, pol_b, relations)
+                    self._process_policy_pair(pol_a, pol_b, relations, parsed[idx_a + 1:idx_b])
                 pair_count += 1
                 if pair_count % self.pair_batch_size == 0:
                     self.flush_findings()
