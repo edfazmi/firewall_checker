@@ -1,15 +1,18 @@
 from datetime import datetime
+import time
 from typing import Any, Dict, List, Optional, Tuple
 from django.utils import timezone
 from compliance.models import Finding
 from . import network_utils
 
 class RuleEngine:
-    def __init__(self, scan_record, active_rules: Dict[str, Any], finding_sink=None, finding_batch_size: int = 500):
+    def __init__(self, scan_record, active_rules: Dict[str, Any], finding_sink=None, finding_batch_size: int = 500, pair_batch_size: int = 250, pair_batch_pause: float = 0.05):
         self.scan_record = scan_record
         self.active_rules = active_rules or {}
         self.finding_sink = finding_sink
         self.finding_batch_size = max(1, int(finding_batch_size or 500))
+        self.pair_batch_size = max(1, int(pair_batch_size or 250))
+        self.pair_batch_pause = max(0.0, float(pair_batch_pause or 0.0))
         self.findings_to_create: List[Finding] = []
         self.risk_index: Dict[str, Dict[str, Any]] = {}
 
@@ -544,6 +547,9 @@ class RuleEngine:
             "src_scopes": src_scopes,
             "dst_scopes": dst_scopes,
             "svc_scopes": svc_scopes,
+            "src_atoms": tuple(atom for scope in src_scopes for atom in network_utils._flatten_scope(scope)),
+            "dst_atoms": tuple(atom for scope in dst_scopes for atom in network_utils._flatten_scope(scope)),
+            "svc_atoms": tuple(atom for scope in svc_scopes for atom in network_utils._flatten_service_scope(scope)),
             "raw": pol,
             "relational_supported": not unsupported,
             "unsupported_relational_features": unsupported,
@@ -558,12 +564,12 @@ class RuleEngine:
             pol_b["src_intf"],
             pol_a["dst_intf"],
             pol_b["dst_intf"],
-            pol_a["src_scopes"],
-            pol_b["src_scopes"],
-            pol_a["dst_scopes"],
-            pol_b["dst_scopes"],
-            pol_a["svc_scopes"],
-            pol_b["svc_scopes"],
+            pol_a.get("src_atoms", pol_a["src_scopes"]),
+            pol_b.get("src_atoms", pol_b["src_scopes"]),
+            pol_a.get("dst_atoms", pol_a["dst_scopes"]),
+            pol_b.get("dst_atoms", pol_b["dst_scopes"]),
+            pol_a.get("svc_atoms", pol_a["svc_scopes"]),
+            pol_b.get("svc_atoms", pol_b["svc_scopes"]),
             pol_a["schedule"],
             pol_b["schedule"],
         )
@@ -572,6 +578,8 @@ class RuleEngine:
         for key in ("source_interface", "destination_interface", "source_network", "destination_network"):
             if relations.get(key) == network_utils.NONE:
                 return None
+        if relations.get("service") == network_utils.NONE:
+            return None
         return relations
 
     def _process_policy_pair(
@@ -611,13 +619,22 @@ class RuleEngine:
             for pol in policies
             if (prepared := self._prepare_policy(pol, address_map, service_map)) is not None
         ]
+        pair_count = 0
         for idx_a, pol_a in enumerate(parsed[:-1]):
+            if not pol_a.get("relational_supported"):
+                continue
             for pol_b in parsed[idx_a + 1:]:
-                if not pol_a.get("relational_supported") or not pol_b.get("relational_supported"):
+                if not pol_b.get("relational_supported"):
                     continue
                 relations = self._compare_policy_pair(pol_a, pol_b)
                 if relations:
                     self._process_policy_pair(pol_a, pol_b, relations)
+                pair_count += 1
+                if pair_count % self.pair_batch_size == 0:
+                    self.flush_findings()
+                    if self.pair_batch_pause > 0:
+                        time.sleep(self.pair_batch_pause)
+        self.flush_findings()
         return parsed
 
     def run_all_checks(

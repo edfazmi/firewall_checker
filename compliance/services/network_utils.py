@@ -454,18 +454,23 @@ def _atom_covers(atom_a: Scope, atom_b: Scope) -> bool:
 def compare_address_scopes(scopes_a: Iterable[Scope], scopes_b: Iterable[Scope]) -> Relation:
     a: List[Scope] = []
     b: List[Scope] = []
-    if isinstance(scopes_a, (list, tuple, set)):
-        for scope in scopes_a:
+    for scope in scopes_a or ():
+        if isinstance(scope, dict) and scope.get("kind") in {"atom-set", "network-set"}:
             a.extend(_flatten_scope(scope))
-    if isinstance(scopes_b, (list, tuple, set)):
-        for scope in scopes_b:
+        elif isinstance(scope, dict):
+            a.append(scope)
+    for scope in scopes_b or ():
+        if isinstance(scope, dict) and scope.get("kind") in {"atom-set", "network-set"}:
             b.extend(_flatten_scope(scope))
+        elif isinstance(scope, dict):
+            b.append(scope)
     if not a or not b:
         return NONE
-    a_keys = {repr(atom) for atom in a}
-    b_keys = {repr(atom) for atom in b}
-    if a_keys == b_keys:
-        return EXACT
+    if len(a) == len(b):
+        a_keys = {repr(atom) for atom in a}
+        b_keys = {repr(atom) for atom in b}
+        if a_keys == b_keys:
+            return EXACT
     a_covers_b = all(any(_atom_covers(atom_a, atom_b) for atom_a in a) for atom_b in b)
     b_covers_a = all(any(_atom_covers(atom_b, atom_a) for atom_b in b) for atom_a in a)
     if a_covers_b and b_covers_a:
@@ -828,13 +833,27 @@ def _service_atom_covers(atom_a: Tuple[str, int, int], atom_b: Tuple[str, int, i
 
 
 def compare_service_scopes(scopes_a: Iterable[Scope], scopes_b: Iterable[Scope]) -> Relation:
-    a = [atom for scope in scopes_a if isinstance(scope, dict) for atom in _flatten_service_scope(scope)]
-    b = [atom for scope in scopes_b if isinstance(scope, dict) for atom in _flatten_service_scope(scope)]
+    a = []
+    b = []
+    for scope in scopes_a or ():
+        if isinstance(scope, dict):
+            if scope.get("kind") == "service-set":
+                a.extend(_flatten_service_scope(scope))
+            elif scope.get("kind") == "service-atom" and isinstance(scope.get("value"), tuple):
+                a.append(scope["value"])
+        elif isinstance(scope, tuple) and len(scope) == 3:
+            a.append(scope)
+    for scope in scopes_b or ():
+        if isinstance(scope, dict):
+            if scope.get("kind") == "service-set":
+                b.extend(_flatten_service_scope(scope))
+            elif scope.get("kind") == "service-atom" and isinstance(scope.get("value"), tuple):
+                b.append(scope["value"])
+        elif isinstance(scope, tuple) and len(scope) == 3:
+            b.append(scope)
     if not a or not b:
         return NONE
-    a_keys = set(a)
-    b_keys = set(b)
-    if a_keys == b_keys:
+    if len(a) == len(b) and set(a) == set(b):
         return EXACT
     a_covers_b = all(any(_service_atom_covers(atom_a, atom_b) for atom_a in a) for atom_b in b)
     b_covers_a = all(any(_service_atom_covers(atom_b, atom_a) for atom_b in b) for atom_a in a)
@@ -862,13 +881,40 @@ def compare_traffic_dimensions(
     schedule_a: Iterable[str] = ("always",),
     schedule_b: Iterable[str] = ("always",),
 ) -> Dict[str, Relation]:
+    schedule = compare_sets(schedule_a, schedule_b, "always")
+    if schedule == NONE:
+        return {"schedule": NONE}
+    source_interface = compare_sets(src_intf_a, src_intf_b, "any")
+    if source_interface == NONE:
+        return {"schedule": schedule, "source_interface": NONE}
+    destination_interface = compare_sets(dst_intf_a, dst_intf_b, "any")
+    if destination_interface == NONE:
+        return {"schedule": schedule, "source_interface": source_interface, "destination_interface": NONE}
+    source_network = compare_address_scopes(src_addr_a, src_addr_b)
+    if source_network == NONE:
+        return {
+            "schedule": schedule,
+            "source_interface": source_interface,
+            "destination_interface": destination_interface,
+            "source_network": NONE,
+        }
+    destination_network = compare_address_scopes(dst_addr_a, dst_addr_b)
+    if destination_network == NONE:
+        return {
+            "schedule": schedule,
+            "source_interface": source_interface,
+            "destination_interface": destination_interface,
+            "source_network": source_network,
+            "destination_network": NONE,
+        }
+    service = compare_service_scopes(svc_a, svc_b)
     return {
-        "schedule": compare_sets(schedule_a, schedule_b, "always"),
-        "source_interface": compare_sets(src_intf_a, src_intf_b, "any"),
-        "destination_interface": compare_sets(dst_intf_a, dst_intf_b, "any"),
-        "source_network": compare_address_scopes(src_addr_a, src_addr_b),
-        "destination_network": compare_address_scopes(dst_addr_a, dst_addr_b),
-        "service": compare_service_scopes(svc_a, svc_b),
+        "schedule": schedule,
+        "source_interface": source_interface,
+        "destination_interface": destination_interface,
+        "source_network": source_network,
+        "destination_network": destination_network,
+        "service": service,
     }
 
 
